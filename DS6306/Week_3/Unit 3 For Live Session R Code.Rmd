@@ -1,0 +1,100 @@
+---
+title: "Unit 3 For Live Session R Code"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Load Required Packages
+```{r}
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("GGally")
+library(GGally)
+```
+
+# Wrangle Data: Filter to get only LM and LF and get the Position factor to have 2 levels
+```{r}
+FIFA = read.csv(file.choose(), header = TRUE)
+head(FIFA) #always check to see if the data were ingested as expected. 
+FIFA2 = FIFA %>% filter(Position == "LM" | Position == "LF")
+FIFA2$Position = as.factor(FIFA2$Position)
+summary(FIFA2$Position)
+```
+
+# Wrangle Data2: Filter to get only LM and LF and get the Position factor to have 2 levels
+```{r}
+FIFA = read.csv(file.choose(), header = TRUE)
+a = as.factor(c(FIFA$Position,FIFA$Preferred.Foot))
+FIFA2 = FIFA %>% filter(Position == "LM" | Position == "LF")
+summary(FIFA2$Position)
+FIFA2$Position = as.factor(as.character(FIFA2$Position))
+summary(FIFA2$Position)
+
+```
+
+
+# Plot matrix of only variables of interest
+```{r}
+FIFA2 %>% select(Acceleration, Agility,Position) %>% ggpairs(aes(color = Position))
+```
+
+# Perform T Test
+```{r}
+t.test(Agility~Position, data = FIFA2)
+```
+
+# Check assumptions with histograms and density plot
+```{r}
+summary(FIFA2$Position)
+FIFA2 %>% ggplot(aes(x = Agility, color = Position, fill = Position)) + geom_histogram(bins = 9) + facet_wrap(~Position)
+FIFA2 %>% filter(Position == "LF") %>% ggplot(aes(x = Agility, color = Position, fill = Position)) + geom_histogram(bins = 9)
+
+FIFA2 %>% ggplot(aes(x = Agility, color = Position, fill = Position)) + geom_density() + facet_wrap(~Position)
+```
+
+## Position Groups
+```{r}
+#group postions into 1 of 4 groups
+FIFA3 = mutate(FIFA, PositionGroup = if_else(Position == "GK", "GK", if_else(Position == "CB" | Position == "LCB" | Position == "LWB" | Position == "LB" | Position == "RCB" | Position == "RB" | Position == "RWB", "DEF", if_else(Position == "CDM" | Position == "RDM" | Position == "RCM" | Position == "RM" | Position == "LDM" | Position == "LCM" | Position == "LM" | Position == "RAM" | Position == "LAM" | Position == "CAM", "MID", "ATT"))))
+
+#compare densities of position groups
+FIFA3 %>% ggplot(aes(x = Agility, color = PositionGroup, fill = PositionGroup)) + geom_density() + facet_wrap(~PositionGroup)
+
+#turn off legend
+FIFA3 %>% ggplot(aes(x = Agility, color = PositionGroup, fill = PositionGroup)) + geom_density() + facet_wrap(~PositionGroup) + theme(legend.position = "none")
+
+#make comparison easier by having 1 column and 4 rows. 
+FIFA3 %>% ggplot(aes(x = Agility, color = PositionGroup, fill = PositionGroup)) + geom_density() + facet_wrap(~PositionGroup, ncol = 1, nrow = 4) + theme(legend.position = "none")
+
+```
+
+```{r}
+#Observe Odd Phenomenon with Overall versus Composure
+FIFA3 %>% ggplot(aes(x = Composure, y = Overall)) + geom_smooth()
+#Plot by position... condition on position 
+FIFA3 %>% ggplot(aes(x = Composure, y = Overall)) + geom_smooth() + facet_wrap(~PositionGroup)
+#Investigate Att and GK
+#Att
+FIFA3 %>% filter(PositionGroup=="ATT", Composure < 37) %>% select(Composure,Overall) %>% arrange(Composure)
+
+#Att
+FIFA3 %>% filter(PositionGroup=="GK", Composure < 37) %>% select(Composure,Overall) %>% arrange(Composure)
+
+#Plot by position... condition on position and add points
+FIFA3 %>% ggplot(aes(x = Composure, y = Overall)) + geom_smooth() + facet_wrap(~PositionGroup) + geom_point()
+
+```
+
+##Change to Factor
+```{r}
+# Sample data frame
+df <- data.frame(col1 = c("A", "B", "C"),
+                 col2 = c("X", "Y", "Z"),
+                 col3 = 1:3)
+
+# Cast 'col1' and 'col2' as factors
+df <- df %>% mutate_at(vars(col1, col2), as.factor)
+
+summary(df)
+```

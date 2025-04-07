@@ -1,0 +1,49 @@
+---
+title: "Asycnh_LS1"
+author: "Johnny Vogt"
+date: "2025-01-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+n1 = rchisq(n = 50, df =2)
+simulations = 10000
+```
+```{r}
+par(mfrow = c(3,2))
+hist(n1, col = "blue", main = paste("Distribution of rchisq"), xlab = "Dist", xlim = c(-5,5))
+mean(n1)
+sd(n1)
+summary(n1)
+```
+
+```{r}
+xbar_holder1 = numeric(simulations) 
+for (i in 1:simulations)
+{ 
+  sample1 = n1
+  xbar1 = mean(sample1)
+  xbar_holder1[i] = xbar1
+}
+
+par(mfrow = c(2,1))
+hist(xbar_holder1, col = "blue", main = paste("Distribution of the sample means"), xlab = "Dist. of Sample Means", xlim = c(-4,4))
+summary(xbar_holder1)
+sd(xbar_holder1)
+```
+
+```{r}
+beachcomber_age <- c(25, 19, 37, 29, 40, 28, 31)
+t.test(beachcomber_age, mu=21)
+```
+

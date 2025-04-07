@@ -1,0 +1,10 @@
+name: flsrshiny
+title:
+username: jv-msds
+account: jv-msds
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14317067
+bundleId: 10040660
+url: https://jv-msds.shinyapps.io/flsrshiny/
+version: 1

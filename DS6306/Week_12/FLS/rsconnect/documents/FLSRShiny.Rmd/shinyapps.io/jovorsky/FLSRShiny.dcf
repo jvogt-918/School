@@ -1,0 +1,12 @@
+name: FLSRShiny
+title: FLSRShiny
+username: jovorsky
+account: jovorsky
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14402273
+bundleId: 10040662
+url: https://jovorsky.shinyapps.io/FLSRShiny/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

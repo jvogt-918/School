@@ -1,0 +1,36 @@
+---
+title: "Week_2_FLS"
+author: "Johnny Vogt"
+date: "2025-01-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```[r]
+#Importing PlayersBBal Dataset
+library(readr)
+PlayersBBall <- read_csv("Unit 2/PlayersBBall.csv")
+View(PlayersBBall)
+
+#Visually represent number of players in each position
+PlayersBBall %>% ggplot(aes(x= position)) +
+  geom_bar() +
+  ggtitle("Number of Players by Position since 1950") +
+  xlab("Position") +
+  ylab("Player Count") + 
+  theme_par()
+#Investigate the distribution of the weight of Centers between the weight of Forwards
+PlayersBBall
+#Investigate the distribution of the height of Centers and the height of Forwards
+#Investigate the if the distribution of height is different between any of the position
+#Investigate the relationship between height and weight, how does height change as the weight change
+#Is there a H/W relationship for each position
+#Investigate the claim that the height of players have incresed over the years
+#Create a 3D plot of Height v. Weight v. Year and color code the position
+#Go to the website (found in PowerPoint) pick one and provide insight
+#Import Education INncome data and test the claim that the mean/median of incomes increase as the education level rises. 
+```
+

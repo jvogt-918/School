@@ -1,0 +1,122 @@
+---
+title: "ShinyApp for U.S Brewery ABV/IBU Analysis"
+author: "Johnny"
+date: "3/23/2025"
+runtime: shiny
+---
+
+```{r echo = FALSE }
+library(shiny)
+
+ui <- fluidPage(
+  tags$head(tags$style("
+                       height: 80vh !important;"
+                       )),
+  
+  # App title ----
+  titlePanel("U.S. Beer Analysis"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      #File Input
+      # Copy the line below to make a file upload manager
+      fileInput("file", label = h3("Upload Beer Data")),
+      hr(),
+
+      #Copy the line below to make a select box 
+      selectInput("select", label = h3("ABV or IBU"), 
+                    choices = list("IBU", "ABV"), 
+                    selected = "abv"),
+      selectInput("plot_type", label = h3("Plot Type"),
+                  choices = c("Histogram", "Boxplot", "Density Plot", "Scatter Plot"),
+                  selected = "Histogram"),
+      
+      selectInput("state", label = h3("State"),
+                  choices = NULL, # This will be populated dynamically
+                  selected = NULL),
+                  
+      #Checkbox for Simple Linear Regression
+      checkboxInput("checkbox", "Check to get the Simple Line", FALSE),
+    
+      # Input: Slider for the number of bins ----
+      sliderInput(inputId = "bins",
+                  label = "Number of bins:",
+                  min = 1,
+                  max = 50,
+                  value = 30)
+    ),
+      
+    # Main panel for displaying outputs ----
+    mainPanel(
+      plotOutput(outputId = "plot")
+    )
+  )
+)
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output, session) {
+  beer <- reactive({
+    req(input$file)
+    read.csv(input$file$datapath)
+  })
+
+   # Dynamically update state choices
+  observeEvent(beer(), {
+    if("Brewery_State" %in% colnames(beer())) {
+      states <- sort(unique(beer()$Brewery_State))
+      updateSelectInput(session, "state", choices = c("All", states))
+    } else {
+      updateSelectInput(session, "state", choices = NULL)
+    }
+  })
+ 
+  filtered_beer <- reactive({
+    req(input$file, input$state)
+    if(input$state == "All") {
+      return(beer())
+    } else {
+      if("Brewery_State" %in% colnames(beer())) {
+        return(beer()[beer()$Brewery_State == input$state, ])
+      } else {
+        return(beer())
+      }
+    }
+  })
+ 
+output$plot <- renderPlot({
+    req(input$select, input$plot_type, input$state)
+    x <- filtered_beer()[, input$select]
+    
+    if(input$plot_type == "Histogram") {
+      bins <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = input$bins + 1)
+      hist(x, breaks = bins, col = "#75AADB", border = "white",
+           xlab = ifelse(input$select == "ABV", "ABV Content", "IBU Content"),
+           main = ifelse(input$select == "ABV", "ABV Content of Beer in the U.S.", "IBU Content of Beer in the U.S."))
+    }
+    
+    if(input$plot_type == "Boxplot") {
+      boxplot(x, main = ifelse(input$select == "ABV", "ABV Boxplot", "IBU Boxplot"))
+    }
+    
+    if(input$plot_type == "Density Plot") {
+      plot(density(x, na.rm = TRUE), main = ifelse(input$select == "ABV", "ABV Density", "IBU Density"))
+    }
+    
+    if(input$plot_type == "Scatter Plot") {
+      y <- filtered_beer()[, ifelse(input$select == "ABV", "IBU", "ABV")]
+      plot(x, y, main = "ABV vs. IBU")
+      if(input$checkbox) {
+        abline(lm(y ~ x), col = "red")
+      }
+    }
+    
+  })
+}
+
+shinyApp(ui, server)
+
+```
+

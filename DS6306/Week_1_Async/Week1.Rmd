@@ -1,0 +1,83 @@
+---
+title: "Unit 1_ doing data science"
+author: "Johnny Vogt"
+date: "2025-01-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+age = c(22,21,24,19,20,23)
+age
+age[2]
+yrs_math_ed = c(4,5,2,5,3,5)
+yrs_math_ed
+
+#data_frame
+df1 = data.frame(Age = age, Years = yrs_math_ed)
+df1
+df1[4,2]
+df1[1, ]
+df1$Years
+
+a = c("Mary","Martha","Kim","Kristen","Amy","Sam")
+b = c("English","Math","Sociology","Math","Music","Dance")
+
+df2 = data.frame(Name = a, Major =b)
+df2
+
+df3 = data.frame(Age = age, Years = yrs_math_ed, Name =a, Major = b)
+df3
+
+df4 = cbind(df1,df2)
+df4
+
+#str and calss show what type of variable it is
+str(df4)
+class(df4$Name)
+summary(df4)
+
+d = c(19,4,"John","Math")
+
+df5
+dfCopy = df4
+dfCopy$Name = as.character(df4$Name)
+dfCopy$Major = as.character(df4$Major)
+summary(dfCopy)
+
+
+#add student to the end of the data frame.
+df5 = rbind(dfCopy,d)
+df5
+
+#fixing Classes
+str(df5)
+df5$Age = as.numeric(df5$Age)
+df5$Years = as.numeric(df5$Years)
+summary(df5)
+df5$Name = as.factor(df5$Name)
+df5$Major = as.factor(df5$Major)
+summary(df5)
+
+str(df5)
+
+#all students with more than 4 years of Math
+df5[df5$Years > 4,]
+df5[(df5$Age >= 21 & df5$Years >4 ),]
+df5[df5$Major == "Math",]
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
