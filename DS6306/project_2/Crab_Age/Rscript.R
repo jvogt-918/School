@@ -14,7 +14,7 @@ library(ggplot2)
 library(tidyverse)
 library(dplyr)
 library(class)
-library(caret)
+library(caret)a
 library(GGally)
 library(corrplot)
 
@@ -107,9 +107,7 @@ crab_age_model <- lm(Age ~ Length + Diameter + Height + Weight + Sex, data = cra
 predictions <- predict(crab_age_model, newdata = crab_age)
 
 #MAE (Mean Average Error)
-## 
 mean(abs(crab_age$Age - predictions))
-?abs
 
 #Creating Train set and a Test set and a loop to
 
@@ -125,7 +123,7 @@ for(j in 1:iterations_crab)
   trainIndices_crab = sample(1:dim(crab_age)[1],round(splitPerc_crab * dim(crab_age)[1]))
   train_crab = crab_age[trainIndices_crab,]
   test_crab = crab_age[-trainIndices_crab,]
-  model_crab = lm(Age ~ Length + Diameter + Height + Weight + Sex, data = train_crab)
+  model_crab = lm(Age ~ Length + Diameter + Height + `Shell Weight` + Sex, data = train_crab)
   #Mean Average Error
   predictions_crab = predict(model_crab, newdata = test_crab)
   masterMAE_crab[j] = mean(abs(test_crab$Age - predictions_crab))
@@ -135,3 +133,8 @@ MeanMAE_crab = colMeans(masterMAE_crab)
 MeanMAE_crab
 
 
+
+crab_age %>% 
+  ggplot(aes(y = Age, x = `Shucked Weight`)) +
+  geom_point(position = "jitter") +
+  geom_smooth(type = "lm")
