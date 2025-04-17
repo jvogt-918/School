@@ -1,0 +1,315 @@
+---
+title: "DDS 6306 Case Study 2 - Crab Age Prediction"
+author: "Michael Flores & Johnny Vogt"
+date: "2025-04-12"
+output: html_document
+---
+
+```{r}
+
+# Executive Summary
+#
+# This project applies predictive modeling and exploratory data analysis (EDA) to support biological research on crab aging. The primary objective is to develop a robust linear regression model that accurately predicts the age of a crab based on various physical characteristics, with the goal of minimizing Mean Absolute Error (MAE) on a designated test dataset. In parallel, the analysis aims to uncover which features most strongly correlate with crab age, providing deeper biological insights through statistical interpretation.
+#
+# To achieve this goal, the dataset underwent extensive cleaning and univariate/bivariate analysis. These steps revealed meaningful patterns, feature distributions, and potential outliers. Correlation analysis and scatterplots identified strong linear relationships between age and features such as shell weight, height, and body dimensions. Multicollinearity was assessed using Variance Inflation Factors (VIF), leading to a simplified regression model that retained only the most informative and independent predictors.
+#
+# Model performance was evaluated using a 70/30 train-test split across 500 randomized iterations. This resampling strategy yielded an average MAE of 1.459. With a narrow mean distribtuion around the mean, this consistent performance across the iterations confirms the model’s reliability and its ability to generalize well on unseen data.
+#
+## Project Deliverables:
+## 1. RShiny App – An interactive tool to explore feature relationships with crab age.
+## 2. RMarkdown Report – Full documentation of data preparation, EDA, and modeling.
+## 3. Age Predictions – Final model predictions submitted for evaluation.
+## 4. GitHub Repository – Code, visualizations, and documentation for reproducibility.
+## 5. 7-Minute Presentation – A video overview summarizing the project's goals, methods, and findings.
+
+# Import Data
+## Load Libraries
+library(ggplot2)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(class)
+library(caret)
+library(GGally)
+library(corrplot)
+library(car)
+
+## Load dataset
+crab_age = read.csv("C:/Users/Mike Flores/OneDrive/Documents/000SMU/6306_Doing Data Science/CSProject02/crab_age.csv", header = TRUE)
+
+# Prep Data
+## List first 6 rows of dataframe
+head(crab_age)
+
+## Check for missing values
+colSums(is.na(crab_age))
+
+## Delete unnecessary columns
+## Remove ID
+crab_age$id <- NULL
+
+## Removing the zeros for Height and Diameter
+crab_age <- crab_age %>%
+  filter(Height != 0, Diameter != 0)
+
+# Univariate Analysis - The univariate analysis provides an overview of the individual distributions of crab features. First, the summary statistics reveal general patterns in the data, such as the typical range of values and the presence of any unusually high or low measurements. The histograms display the shape of each numeric variable's distribution. Most features appear to be unimodal, though some exhibit right-skewed behavior — such as `Weight` and `Shell Weight` — indicating that a small number of crabs are significantly heavier than average. The boxplots help identify outliers and show the spread and central tendency of each feature. For example, the presence of outliers in `Viscera Weight` and `Height` suggests some individual crabs have extreme measurements, which may affect model performance and should be considered during preprocessing or modeling. Altogether, this analysis helps build familiarity with the dataset, guides feature selection, and provides context for interpreting the results of the regression model later in the project.
+
+## Summary statistics to determine central tendency & spread (mean, median, min, max, sd, IQR)
+summary(crab_age)
+
+## Histograms for numerical variables
+
+### Count of crabs by Sex
+ggplot(crab_age, aes(x = Sex)) +
+  geom_bar(fill = "orange") +
+  labs(title = "Counts of Crab Sex", x = "Sex", y = "Count") +
+  theme_minimal()
+
+### Reshape all numeric variables for histogram and boxplot visualization
+crab_long_all <- crab_age %>%
+  select(where(is.numeric)) %>%  # Select all numeric columns
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Value")
+
+### Faceted histograms for all numeric variables
+ggplot(crab_long_all, aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  facet_wrap(~ Feature, scales = "free", ncol = 3) +
+  labs(title = "Histograms of All Crab Features", x = "Value", y = "Count") +
+  theme_minimal()
+
+### Density plots for all numeric features
+ggplot(crab_long_all, aes(x = Value)) +
+  geom_density(fill = "purple", alpha = 0.5) +
+  facet_wrap(~ Feature, scales = "free", ncol = 3) +
+  labs(title = "Density Plots of All Crab Features", x = "Value", y = "Density") +
+  theme_minimal()
+
+### Faceted boxplots for all numeric variables
+ggplot(crab_long_all, aes(y = Value)) +
+  geom_boxplot(fill = "green") +
+  facet_wrap(~ Feature, scales = "free", ncol = 3) +
+  labs(title = "Boxplots of All Crab Features", y = "Value") +
+  theme_minimal()
+
+# Bivariate Analysis - The bivariate analysis explores how physical crab features vary by age and sex to support feature selection and modeling decisions. By grouping features by Age, we identify which measurements consistently increase or decrease over time, highlighting potential predictors of crab age. Grouping by Sex allows us to detect biological differences that may influence feature distributions, helping us evaluate whether Sex should be included as a predictor in the regression model. Finally, boxplots by Sex provide insight into the variability and spread of each feature within sex groups, revealing potential outliers or inconsistent patterns that could affect model accuracy. Together, these comparisons help us understand how two-variable relationships contribute to age prediction and guide informed preprocessing and model design.
+
+## Correlation Matrix - The correlation matrix reveals the strength of linear relationships between variables. To visualize these relationships further, scatterplots were created for each numeric featurse against `Age`. Most features exhibit clear upward trends, supporting the hypothesis that physical growth indicators are useful for predicting crab age. The addition of linear trend lines helps confirm the direction and strength of these associations. These visual insights complement the correlation matrix and provide guidance for selecting features in the modeling phase.
+
+numeric_vars <- crab_age %>% select(where(is.numeric))
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+corrplot(cor_matrix, method = "color", type = "upper", 
+         tl.cex = 0.8, tl.col = "black", addCoef.col = "black",
+         title = "Correlation Matrix of Numeric Variables", mar = c(0,0,1,0))
+
+## All features are positively correlated with Age, which makes sense biologically — crabs grow over time. The top features Shell Weight, Height, Diameter, Length, and Weight show correlations above 0.6, which makes them strong candidates for inclusion in a regression model. Weight-based features like Shucked Weight and Viscera Weight are moderately correlated and may provide complementary information, but "may" exlude them from the regression model.  Similarly, since Weight is a combination of other variables, it "will" be excluded from the regression model.
+
+## Scatterplots vs Age
+
+## Scatterplots provide a visual assessment of how individual crab features relate to age. Most variables, such as Shell Weight, Height, and Length, show a clear positive trend — confirming their strong linear correlation with Age. The presence of a visible upward slope in the fitted trend lines suggests that these features may be effective predictors in a regression model. A few plots show more scatter or mild non-linear behavior, particularly for Shucked Weight, which may contribute less predictive power or require transformation. Overall, the scatterplots help validate and refine the feature selection process initiated by the correlation analysis.
+
+## Reshape data: feature vs. Age
+age_long <- crab_age %>%
+  select(Age, Length, Diameter, Height, Weight, Shucked.Weight, Viscera.Weight, Shell.Weight) %>%
+  pivot_longer(cols = -Age, names_to = "Feature", values_to = "Value")
+
+## Scatterplots of each feature against Age
+ggplot(age_long, aes(x = Age, y = Value)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  facet_wrap(~ Feature, scales = "free_y", ncol = 3) +
+  labs(title = "Scatterplots of Crab Features vs Age", x = "Age", y = "Feature Value") +
+  theme_minimal()
+
+## Compute categorical averages and grouped by Age. To perform exploratory data analysis (EDA) to reveals how different physical features of crabs vary as they age.
+ageavg <- crab_age %>%
+  group_by(Age) %>%
+  summarize(
+    avg_length     = mean(Length, na.rm = TRUE),
+    avg_diameter   = mean(Diameter, na.rm = TRUE),
+    avg_height     = mean(Height, na.rm = TRUE),
+    avg_weight     = mean(Weight, na.rm = TRUE),
+    avg_shweight   = mean(Shucked.Weight, na.rm = TRUE),
+    avg_visweight  = mean(Viscera.Weight, na.rm = TRUE),
+    avg_shlweight  = mean(Shell.Weight, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## Reshape ageavg to long format
+ageavg_long <- ageavg %>%
+  pivot_longer(
+    cols = -Age,
+    names_to = "Feature",
+    values_to = "Average"
+  )
+
+## Faceted line plots
+ggplot(ageavg_long, aes(x = Age, y = Average)) +
+  geom_line(color = "blue") +
+  geom_point() +
+  facet_wrap(~ Feature, scales = "free_y") +
+  labs(title = "Average Feature Values by Crab Age", x = "Age", y = "Average Value") +
+  theme_minimal()
+ 
+## Compute categorical averages and grouped by Sex. To perform exploratory data analysis (EDA) to reveals how different physical features of crabs vary based on their gender.
+sexavg <- crab_age %>%
+  group_by(Sex) %>%
+  summarize(
+    avg_age = mean(Age, na.rm = TRUE),
+    avg_length = mean(Length, na.rm = TRUE),
+    avg_diameter = mean(Diameter, na.rm = TRUE),
+    avg_height = mean(Height, na.rm = TRUE),
+    avg_weight = mean(Weight, na.rm = TRUE),
+    avg_shweight = mean(Shucked.Weight, na.rm = TRUE),
+    avg_visweight = mean(Viscera.Weight, na.rm = TRUE),
+    avg_shlweight = mean(Shell.Weight, na.rm = TRUE),
+  )
+
+## Reshape sexavg to long format
+sexavg_long <- sexavg %>%
+  pivot_longer(
+    cols = -Sex,
+    names_to = "Feature",
+    values_to = "Average"
+  )
+
+## Plot: Bar Chart with facets
+ggplot(sexavg_long, aes(x = Sex, y = Average, fill = Sex)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ Feature, scales = "free_y") +
+  labs(title = "Average Crab Features by Sex", x = "Sex", y = "Average Value") +
+  theme_minimal()
+
+## Create Box Plots for Sex vs each other variable.
+crab_age %>%
+  ggplot(aes(y = Sex, x = Length)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x = Diameter)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x = Height)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x = Weight)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x = `Shucked.Weight`)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x = `Viscera.Weight` )) +
+  geom_boxplot() 
+
+crab_age %>%
+  ggplot(aes(y = Sex, x= `Shell.Weight`)) +
+  geom_boxplot()
+
+crab_age %>%
+  ggplot(aes(y = Sex, x= Age)) +
+  geom_boxplot()
+
+# Linear Regression Model to Predict the Age of a Crab Based on Various Physical Features
+## Model training.
+crab_age_model <- lm(Age ~ Length + Diameter + Height + Shucked.Weight + Viscera.Weight + Shell.Weight + Sex, data = crab_age)
+## Model predicting.
+predictions <- predict(crab_age_model, newdata = crab_age)
+## Mean Absolute Error (MAE) for the regression model.
+mean(abs(crab_age$Age - predictions))
+
+## Multicollinearity Check on Training dataset - To ensure the model predictors are not excessively correlated with each other, we calculated the Variance Inflation Factor (VIF) for each feature in the linear regression model. Interpret the results per the following:
+##
+##VIF Value           Interpretation
+##----------------------------------
+##1-2                 No multicollinearity
+##2-5                 Moderate, but acceptable
+##> 5                 Possible multicollinearity issue
+##> 10                Likely multicollinearity issue
+
+## Check Variance Inflation Factors (VIF)
+vif(crab_age_model)
+
+## Simpler regression model: dropped Length due to high VIF overlap with Diameter.
+crab_age_model_simple1 <- lm(Age ~ Diameter + Height + Shucked.Weight + Shell.Weight + Sex, data = crab_age)
+
+## Predict and evaluate
+predictions_simple1 <- predict(crab_age_model_simple1, newdata1 = crab_age)
+mean(abs(crab_age$Age - predictions_simple1))  # Check new MAE
+
+## Re-check VIF
+vif(crab_age_model_simple1)
+
+## Simpler regression model: dropped Diameter due to high VIF overlap with Diameter.
+crab_age_model_simple2 <- lm(Age ~ Length + Height + Shucked.Weight + Shell.Weight + Sex, data = crab_age)
+
+## Predict and evaluate Mean Absolute Error (MAE)
+predictions_simple2 <- predict(crab_age_model_simple2, newdata2 = crab_age)
+mean(abs(crab_age$Age - predictions_simple2))
+
+## Re-check VIF
+vif(crab_age_model_simple2)
+
+## Model Variant Comparison
+
+## After evaluating multiple feature combinations, we tested two simplified linear regression models — one using `Length` and the other using `Diameter` as primary body size indicators. Both models achieved comparable MAE values (~1.458) and showed no significant multicollinearity, with all VIF values below 4. This confirms that either, but 'not' both, `Length` or `Diameter` can serve as an effective and stable predictor of crab age when paired with height and weight-based features. Since, eliminating 'Diameter' from the linear regression model yielded slightly better results, we choose to keep 'Length' in the model.
+
+# Model Validation with Train/Test Splitting
+#
+# To assess the predictive stability of our linear regression model, we implemented a repeated train/test splitting approach. This method randomly partitions the dataset into training and testing subsets multiple times to evaluate how consistently the model performs on unseen data. Specifically, we used a 70/30 split ratio and repeated the process across 500 iterations. This approach provides a more reliable estimate of the model's Mean Absolute Error (MAE) by accounting for variability introduced through different data splits. It also helps validate that our model generalizes well beyond the specific training data used in a single fit.
+
+iterations_crab = 500
+
+masterMAE_crab = matrix(nrow = iterations_crab)
+
+splitPerc_crab = .7 #Training / Test split Percentage
+
+for(j in 1:iterations_crab)
+{
+  trainIndices_crab = sample(1:dim(crab_age)[1],round(splitPerc_crab * dim(crab_age)[1]))
+  train_crab = crab_age[trainIndices_crab,]
+  test_crab = crab_age[-trainIndices_crab,]
+  model_crab = lm(Age ~ Length + Height + Shucked.Weight + Shell.Weight + Sex, data = train_crab)
+  predictions_crab = predict(model_crab, newdata = test_crab)
+  masterMAE_crab[j] = mean(abs(test_crab$Age - predictions_crab))
+}
+
+MeanMAE_crab = colMeans(masterMAE_crab)
+MeanMAE_crab
+
+## Cross-Validation with Random Sampling
+##
+## To evaluate the stability and generalization of the regression model, we performed 500 randomized train/test splits using a 70/30 split ratio. In each iteration, the model was trained on a random 70% of the data and evaluated on the remaining 30%. The Mean Absolute Error (MAE) was computed for each iteration. After 500 iterations, the average MAE was "1.459", confirming the model's reliability and predictive consistency across multiple data splits. This result aligns closely with the MAE from earlier single-split evaluations.
+
+## Convert to data frame for plotting
+mae_df <- data.frame(MAE = masterMAE_crab)
+
+## Plot the distribution
+ggplot(mae_df, aes(x = MAE)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(aes(xintercept = mean(MAE)), color = "red", linetype = "dashed", linewidth = 1) +
+  labs(
+    title = "Distribution of MAE Across 500 Iterations",
+    x = "Mean Absolute Error (MAE)",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+## The histogram shows the distribution of MAE values computed over 500 random train/test splits. The narrow concentration around the mean MAE (~1.459) indicates that the model performs consistently regardless of how the data is partitioned. We anticipate this will support the model’s reliability and its ability to generalize well on unseen data.
+
+# Conclusion
+#
+# This project successfully applied linear regression modeling and exploratory data analysis to predict the biological age of crabs based on measurable physical traits. Through a structured workflow of data cleaning, univariate and bivariate exploration, and multicollinearity diagnostics, we identified key predictors—including shell weight, height, shucked weight, and body length—that contribute meaningfully to age estimation.
+#
+# By testing multiple model variations and validating performance through 500 randomized train/test splits, we achieved a consistent Mean Absolute Error (MAE) of approximately 1.459. This consistency reinforces the model’s reliability and its ability to generalize across different data partitions.
+# 
+# The findings not only support the predictive utility of the final model but also offer valuable insights into how certain physical characteristics of crabs evolve with age—providing a foundation for further biological research or practical applications in species monitoring.
+#
+# Future improvements could explore non-linear models or ensemble methods to capture more complex patterns in the data and further reduce prediction error.
+
+
+
+
+```
