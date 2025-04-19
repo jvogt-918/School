@@ -5,7 +5,7 @@ account: jovorsky
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 14511019
-bundleId: 10135621
+bundleId: 10143431
 url: https://jovorsky.shinyapps.io/Crab_Age_Analysis/
 version: 1
 asMultiple: FALSE

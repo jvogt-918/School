@@ -36,7 +36,8 @@ ui <- fluidPage(
     "Crab Age Analysis",
     tabPanel("Plots and Graphs",
              sidebarPanel(
-               selectInput("select_sp", label = h3("Explanatory Variable (Only ScatterPlot)"), 
+               h4("Plot Settings"),
+               selectInput("select_sp", label = h3("Scatterplot Variable"), 
                                choices = list(
                                  "Length",
                                  "Diameter",
@@ -47,7 +48,21 @@ ui <- fluidPage(
                                  "Shell Weight" = "Shell.Weight"
                                  ), 
                                selected = "Length"),
-               selectInput("select_bp", label = h3("Explanatory Variable (Only Boxplot)"), 
+               selectInput("select_bp", label = h3("Boxplot Variable"), 
+                           choices = list(
+                             "Age",
+                             "Length",
+                             "Diameter",
+                             "Height",
+                             "Weight",
+                             "Shucked Weight" = "Shucked.Weight",
+                             "Viscera Weight" = "Viscera.Weight",
+                             "Shell Weight" = "Shell.Weight"
+                             ), 
+                           selected = "Length"),
+               tags$hr(),
+               h4("Violin Plot Settings"),
+               selectInput("select_vp_x", label = h3("X Variable"), 
                            choices = list(
                              "Sex",
                              "Length",
@@ -59,19 +74,7 @@ ui <- fluidPage(
                              "Shell Weight" = "Shell.Weight"
                              ), 
                            selected = "Length"),
-               selectInput("select_vp_x", label = h3("Y Variable (Violin Plot)"), 
-                           choices = list(
-                             "Sex",
-                             "Length",
-                             "Diameter",
-                             "Height",
-                             "Weight",
-                             "Shucked Weight" = "Shucked.Weight",
-                             "Viscera Weight" = "Viscera.Weight",
-                             "Shell Weight" = "Shell.Weight"
-                             ), 
-                           selected = "Length"),
-               selectInput("select_vp_y", label = h3("X Variable (Violin Plot)"), 
+               selectInput("select_vp_y", label = h3("Y Variable"), 
                            choices = list(
                              "Age",
                              "Sex",
@@ -84,6 +87,7 @@ ui <- fluidPage(
                              "Shell Weight" = "Shell.Weight"
                              ), 
                            selected = "Length"),
+               helpText("Tip: Hover over Labels for more Info")
              ),
              mainPanel(
                tabsetPanel(
@@ -110,14 +114,8 @@ ui <- fluidPage(
                            ), 
                            selected = "Mean"),
              ),
-             layout_columns(
-               card(
-                 card_header("Averages seperated by Sex"),
-                 card_body(
-                   tableOutput("average")
-               )
-             ),
-             "This page will show the averages and trends found during the EDA")
+             tableOutput("average"),
+             "This page will show the averages and trends found during the EDA"
              ),
     tabPanel("Prediction Model",
              sidebarPanel(
@@ -194,9 +192,11 @@ server <- function(input, output) {
     output$boxplot <- renderPlot({
       #Creating Box Plot
       crab_age %>%
-        ggplot(aes(x = Age, y = !!sym(input$select_bp))) +
-        geom_boxplot()
-    })
+        ggplot(aes(x = Sex, y = !!sym(input$select_bp))) +
+        geom_boxplot() +
+        ylab(input$select_bp) +
+        theme(axis.text.x = element_text(size = 18))
+     })
     output$violin <- renderPlot({
       #Creating Violin Plot Base
       crab_age %>%
@@ -212,14 +212,14 @@ server <- function(input, output) {
       averages <- crab_age %>%
       group_by(Sex) %>%
       summarize(
-        avg_Age = func(Age, na.rm = TRUE),
-        avg_length = func(Length, na.rm = TRUE),
-        avg_diameter = func(Diameter, na.rm = TRUE),
-        avg_height = func(Height, na.rm = TRUE),
-        avg_weight = func(Weight, na.rm = TRUE),
-        avg_shweight = func(Shucked.Weight, na.rm = TRUE),
-        avg_visweight = func(Viscera.Weight, na.rm = TRUE),
-        avg_shlweight = func(Shell.Weight, na.rm = TRUE)
+        "Avg. Age" = func(Age, na.rm = TRUE),
+        "Avg. Length" = func(Length, na.rm = TRUE),
+        "Avg. Diameter" = func(Diameter, na.rm = TRUE),
+        "Avg. Height" = func(Height, na.rm = TRUE),
+        "Avg. Weight" = func(Weight, na.rm = TRUE),
+        "Avg. Shucked Weight" = func(Shucked.Weight, na.rm = TRUE),
+        "Avg. Viscera Weight" = func(Viscera.Weight, na.rm = TRUE),
+        "Avg Shell Weight" = func(Shell.Weight, na.rm = TRUE)
       ) 
       }, rownames = FALSE)
     

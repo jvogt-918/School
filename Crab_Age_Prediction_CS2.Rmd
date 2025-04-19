@@ -35,7 +35,7 @@ library(corrplot)
 library(car)
 
 ## Load dataset
-crab_age = read.csv("C:/Users/Mike Flores/OneDrive/Documents/000SMU/6306_Doing Data Science/CSProject02/crab_age.csv", header = TRUE)
+crab_age = read.csv("C:/Users/jvogt/Documents/000SMU/6306_Doing Data Science/CSProject02/crab_age.csv", header = TRUE)
 
 # Prep Data
 ## List first 6 rows of dataframe
