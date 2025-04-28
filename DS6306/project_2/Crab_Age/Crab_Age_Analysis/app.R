@@ -285,6 +285,7 @@ server <- function(input, output) {
       req(masterMAE()) # Ensure MAE data exists
       ggplot(data.frame(MAE = masterMAE()), aes(x = MAE)) +
         geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+        geom_vline(aes(xintercept = mean(MAE)), color = "red", linetype = "dashed", size = 1)+
         labs(title = "MAE Distribution Across 500 Iterations")
     })
     
