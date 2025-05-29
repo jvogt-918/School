@@ -119,3 +119,33 @@ for(i in 1:20)
 }
 
 plot(effectsizes,powerholder,type = "l", col = "blue", main = "POWER CURVE", ylab = "POWER", lwd = 3)
+
+
+#Homework 
+
+fired_samoan = c(34, 37, 37, 38, 41, 42, 43, 44, 44, 45, 45, 45, 46, 48, 49, 53, 53, 54, 54, 55, 56)
+nonfired_samoan = c(27, 33, 36, 37, 38, 38, 39, 42, 42, 43, 43, 44, 44, 44, 45, 45, 45, 45, 46, 46, 47, 47, 48, 48, 49, 49, 51, 51, 52, 54)
+n1 = length(fired_samoan)
+n2 = length(nonfired_samoan)
+sd1 = sd(fired_samoan)
+sd2 = sd(nonfired_samoan)
+pooled_sd <- sqrt(((n1 - 1)*sd1^2 + (n2 - 1)*sd2^2) / (n1 + n2 - 2)) 
+
+power.t.test(n = n1, delta = 2, sd = pooled_sd, sig.level = .05, type = "two.sample", alternative = "one.sided")
+power.t.test(n = NULL, delta = 2, sd = pooled_sd, sig.level = .05, power = .9, type = "two.sample", alternative = "one.sided")
+power.t.test(n = NULL, delta = 1, sd = pooled_sd, sig.level = .05, power = .9, type = "two.sample", alternative = "one.sided")
+power.t.test(n = NULL, delta = 1, sd = pooled_sd, sig.level = .01, power = .9, type = "two.sample", alternative = "one.sided")
+
+#Homework Sample Size Power Currrve
+powerholder = c()
+samplesizes = seq(10,1500, length = 20)
+
+for(i in 1:20)
+{
+  powerholder[i] = power.t.test(n = samplesizes[i], delta=1, sd =pooled_sd, sig.level = .05, type = "two.sample", alternative = "one.sided")$power
+}
+
+plot(samplesizes, powerholder, type = "l",col = "blue", main = "POWER CURVE", ylab = "POWER", lwd = 3 )
+
+t.test(x = fired_samoan, y = nonfired_samoan, conf.int = .95, var.equal = FALSE, alternative = "greater")
+power.t.test(n = 21, delta = 1, sd = pooled_sd, sig.level = .01, power = NULL, type = "two.sample", alternative = "one.sided")
