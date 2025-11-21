@@ -1,0 +1,204 @@
+---
+title: "Unit 7 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1:  IFN Data Revisited
+Many repeated measures studies sample data over fixed time points. Under this setting, the time variable could be treated as a factor when the interest is to compare time points to each other.  Visually, it is helpful to plot the means of each time group along with additional predictor information. For plotting purposes, it is helpful to create a data set just with summary statistics first.
+
+The following code computes the mean IFN level for each time point and status (symptomatic and asymptomatic).  Additional columns include the SE for the mean and a rough CI for each group.
+
+```{r, message=F}
+library(tidyverse)
+setwd("~/Desktop/CourseDev/Unit 7/PresentationRScripts")
+data<-read.csv(file="FluStudy.csv",stringsAsFactors = T)
+#View(data)
+data<-na.omit(data)
+
+#Cleaning up variable names
+names(data)[6]<-"Status"
+
+
+#Summary stats by time and status
+statsIFN<-data %>%
+  group_by(Status,Hours) %>%
+  summarise(
+    count=n(),
+    IFIT=mean(IFITM3),
+    sdIFIT=sd(IFITM3)/sqrt(count),
+    lower=IFIT-2*sdIFIT,
+    upper=IFIT+2*sdIFIT
+  )
+
+statsIFN
+
+```
+With the mean table, we can use `ggplot` to get a sense of the trend over time by status. The second graph includes plots of individual measurements that highlight repeated measures on the same subject.
+```{r, message=F}
+library(ggplot2)
+prof.mean<-ggplot(statsIFN,aes(x=Hours,y=IFIT,color=Status,shape=Status))+
+  geom_line()+
+  geom_point(size=2.5)+
+  labs(y="Mean IFITM3 Expression Values")+
+  scale_color_manual(values=c("black","skyblue"))+
+  scale_shape_manual(values=c(15,16))+
+  ylim(9,15.5)+
+  guides(shape="none")+
+  theme_bw()
+
+prof.mean+geom_errorbar(aes(ymin=lower,ymax=upper,color=Status),width=2)
+
+
+ggplot(statsIFN, aes(x=Hours, y=IFIT, color=Status, shape=Status)) +
+  geom_line(aes(x=Hours, y=IFITM3, group=Subject, color=" Asymp Patients"), data=data[data$Status == 'Asymp',]) +
+  geom_line(aes(x=Hours, y=IFITM3, group=Subject, color=" Symp Patients"), data=data[data$Status == 'Symp',]) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.5) +
+  geom_point(size = 2.5) + 
+  labs(color="Status", x="Hours", y = "Mean IFITM3 Expression Values") +
+  ylim(9, 15.5) + 
+  scale_color_manual(values = c("grey90", "grey70", "black", "skyblue")) +
+  scale_shape_manual(values=c(15,16)) +
+  guides(shape="none") + 
+  facet_wrap(~Status, nrow = 1) +
+  theme_bw()
+
+
+```
+
+To help get a sense of the importance of repeated measures, I want you to compare the results of performing an analysis on this data set using traditional MLR (ignoring that the independence assumption is broken) versus a model that takes into account the fact that residuals are correlated. The two code chunks below provides two analyses and report some specific time comparisons as well as make residual plots.  Compare the output and write a short summary of any differences in the results that exist. You will not see many, but the few that are there are important.
+
+Repeated Measures Model
+```{r, message=F}
+library(emmeans)
+library(nlme)
+data$Hours.Fac<-factor(data$Hours)
+UN<-gls(IFITM3~Hours.Fac*Status,data=data,correlation=corSymm(form=~1|Subject))
+
+#Comparing changes from time point to baseline
+results<-emmeans(UN,~Hours.Fac|Status,mode="df.error")
+comparisons<-contrast(results, "trt.vs.ctrl",ref=1,combine = TRUE, adjust = "bonferroni",interaction=T)
+
+#Comparing changes between status at each time point
+results2<-emmeans(UN,~Status|Hours.Fac,mode="df.error")
+comparisons2<-contrast(results2, "pairwise", combine = TRUE, adjust = "bonferroni")
+
+#Aggregating results
+comparisons2.update<-update(comparisons2[1]+comparisons2[2]+comparisons2[3]+comparisons2[4]+
+         comparisons2[5]+comparisons2[6]+comparisons2[7]   )
+
+comparisons
+comparisons2.update
+
+
+
+```
+
+MLR Model
+```{r}
+MLR<-lm(IFITM3~Hours.Fac*Status,data=data)
+
+#Comparing changes from time point to baseline
+results<-emmeans(MLR,~Hours.Fac|Status,mode="df.error")
+comparisons<-contrast(results, "trt.vs.ctrl",ref=1,combine = TRUE, adjust = "bonferroni",interaction=T)
+
+#Comparing changes between status at each time point
+results2<-emmeans(MLR,~Status|Hours.Fac,mode="df.error")
+comparisons2<-contrast(results2, "pairwise", combine = TRUE, adjust = "bonferroni")
+
+#Aggregating results
+comparisons2.update<-update(comparisons2[1]+comparisons2[2]+comparisons2[3]+comparisons2[4]+
+         comparisons2[5]+comparisons2[6]+comparisons2[7]   )
+
+comparisons
+comparisons2.update
+
+```
+
+Plot of residuals are included below:
+
+```{r,echo=F}
+plot(UN,main="GLS")
+plot(MLR$fitted.values,MLR$residuals,xlab="Fitted",ylab="Residuals",main="MLR")    
+
+par(mfrow=c(1,2))
+qqnorm(UN$residuals,main="GLS")
+qqline(UN$residuals)
+
+qqnorm(MLR$residuals,main="MLR")
+qqline(MLR$residuals)
+par(mfrow=c(1,1))
+```
+
+
+
+## Discussion 2: A New Data Set
+As mentioned during the videos, repeated measures often gets lumped into ANOVA type settings where all of the predictors are categorical.  Repeated measures can exist in almost any setting a normal MLR model could be utilized. 
+The following data set is the results of an experiment studying the weight gain of rats on different diets.  It is actually available in the **nlme** package where the `gls` function lives.
+
+```{r}
+rats<-data.frame(BodyWeight)
+head(rats)
+```
+
+For this data set, it is expected that the weight gain (or loss) should behave in a linear way over time.  The graph below provides a plot weight over time with an MLR fit for each diet group
+```{r}
+ggplot(rats, aes(x=Time, y=weight,color=Diet)) +geom_point(size=.5)+
+  geom_smooth(method="lm",formula="y~x")
+```
+
+A.  Lets fit a regression model (MLR) including diet and time as predictors. The rates look to be potentially different so I will add an interaction term as well. Below is the result of that fit and computing a correlogram using the residuals.  Comment on whether the independence of the MLR model is violated. 
+```{r, echo=F, message=F}
+library(reshape2)  #For correlogram
+library(Hmisc)    #For correlogram
+
+#Turner's Correlogram Function
+cor.gram<-function(mymodel,subid,timeid){
+  r.raw<- residuals(mymodel)
+  r.frame<-data.frame(sub=subid,time=timeid,resids=r.raw)
+  
+  
+  r.wide<-acast(r.frame,sub~time,value.var="resids")
+  r.cor<-rcorr(r.wide)$r
+  #r.time<-as.numeric(colnames(r.cor))
+  r.tall<-data.frame(rows=rownames(r.cor)[row(r.cor)], vars=colnames(r.cor)[col(r.cor)],
+                     values=c(r.cor))
+  r.tall$d<-abs(as.numeric(r.tall$rows)-as.numeric(r.tall$vars))
+  r.tall<-aggregate(values~d,data=r.tall,function(x){tanh(mean(atanh(x)))})
+  r.tall
+}
+
+mymodel<-lm(weight~Time*Diet,data=rats)
+#Getting correlogram
+mycorgram<-cor.gram(mymodel,subid=rats$Rat,timeid=rats$Time)
+
+ggplot(mycorgram,aes(x=d,y=values))+geom_point()+geom_smooth(method="loess",size=1.5)+
+  ggtitle("Correlogram of Rat Weight MLR Residuals")+
+  xlab("Distance between residuals (Time)")+
+  ylim(0,1)
+
+```
+
+B.  If the answer is yes, the assumption is violated to the previous question: what correlation structure do you think would work here (Unstructured, CS, AR)? Compare the model fits below to see if your intuition was right. Unfortunately there is not enough data to fit an unstructured model in this case.
+```{r }
+#Compound Symmetry
+CS<-gls(weight~Time*Diet,data=rats,correlation=corCompSymm(form=~1|Rat))
+
+#Autoregressive
+AR1<-gls(weight~Time*Diet,data=rats,correlation=corExp(form=~Time|Rat))
+
+AIC(CS)
+AIC(AR1)
+
+```
+
+C.  Run the same model from part B but use the traditional `lm` function and obtain a summary of the coefficients, t-stats, and p-values.  Compare the two results and comment on the differences you see.
+```{r}
+coef(summary(AR1))
+```
+

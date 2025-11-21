@@ -1,0 +1,150 @@
+---
+title: "Vogt_Johnny_Unit6HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MASS) 
+sigma<-matrix(c(1,.8,.8,.8,1,.8,.8,.8,1),3,3)
+sigma
+mu<-c(5,5,5)
+X<-mvrnorm(5000,mu,sigma)
+```
+
+A.  This example is a special case when it comes to covariance matrices.  Since all three standard deviations are one, what do the covariances actually tell us in this case?
+
+When each the standard deviation is equal to 1, the covariance can be considered as the correlation. so the covariance tells us that r =0.8 is the correlation between each variable, indicating a strong positive correlation. 
+
+
+B.  Create a `ggpairs` plot to verify that the simulated data behaves like MVN data should.  Comment on the key characteristics in the plot that support the argument that they are MVN distributed.
+
+The histograms are normally distributed, showing that each variable is normal. Each relationshipt between each variable also shows a positive linear relationship, which supposted with the strong correlation value. 
+
+```{r}
+library(GGally)
+X_df <- as.data.frame(X)
+colnames(X_df) <- c("X1", "X2", "X3")
+
+ggpairs(X_df)
+```
+
+C.  Determine a matrix $C$, such that when you multiply the data by this matrix, $XC$, you will have a new data set with the first variable being $X_1+X_2+X3$ and the second variable being $X_1-X_2$.
+
+$$X=\begin{bmatrix}
+1&3&5 \\
+2&4&6 \\
+\end{bmatrix}$$
+
+$$X=\begin{bmatrix}
+1&1 \\
+1&-1 \\
+1&0 \\
+\end{bmatrix}$$
+
+$$X=\begin{bmatrix}
+(1*1) + (1*3)+(1*5) &(1*(-1))+(3*(-1))+(5*0) \\
+(1*2)(1*4)(1*6)&(2+1)+(4*(-1))+(6*0) \\
+\end{bmatrix}$$
+
+$$X=\begin{bmatrix}
+1 + 3 + 5 & 1 + (-3) + 0 \\
+2 + 4 + 6 & 2 +(-4)+ 0 \\
+\end{bmatrix}$$
+
+$$X=\begin{bmatrix}
+9 & -2 \\
+12 & -2 \\
+\end{bmatrix}$$
+```{r}
+C <-matrix(c(1,1,1,1,-1,0),3,2)
+
+#USED THIS TO UNDERSTAND MATRIX
+#X <-matrix(c(1,2,3,
+#            4,5,6),2,3)  
+
+
+XC <- X %*% C
+
+```
+
+D.  With your given $C$, compute $XC$ and calculate the variance-covariance matrix of this new data set. Recall that the `var` function can do this.  Record the variance of the two new variables. Note that what you have done is calculated the variance for a sum and difference of positively correlated variables.
+
+```{r}
+var_xc <- var(XC)
+var_xc
+
+
+```
+
+E.  Repeat the process again but simulate the data so that they are uncorrelated.  Compare the variances this time versus the results in part D. Does adding positive correlated variables have larger or smaller variance than when adding uncorrelated variables?  Similar question for subtracting.  Graphing the variables in histograms (with the same x axis) may be helpful versus just looking at numbers.
+
+Adding positve correlated variables creates larger variance to the data set rather than adding uncorrelated data. 
+Rather subtracting positively correlated variables creates a significantly smaller variance than subtracting uncorrelated data. 
+
+```{R}
+uncorr_sigma <- sigma<-matrix(c(1,0,0,0,1,0,0,0,1),3,3)
+X_uncorr <- mvrnorm(5000, mu, uncorr_sigma)
+
+X_uncorrC <- X_uncorr %*% C
+var_x_uncor <- var(X_uncorrC)
+var_x_uncor
+var_xc
+
+Xuncor_df <- as.data.frame(X_uncorr)
+colnames(Xuncor_df) <- c("X1", "X2", "X3")
+
+ggpairs(Xuncor_df)
+```
+
+
+
+#2
+## Understanding Multicollinearity
+```{r }
+set.seed(1234)
+sigma<-matrix(c(1,.6,.6,.6,1,0,.6,0,1),3,3)
+#sigma
+mu<-c(5,5,5)
+#mydata<-data.frame(round(mvrnorm(20,mu,sigma),1))
+mydata<-data.frame(mvrnorm(20,mu,sigma))
+names(mydata)<-c("Y","X1","X2")
+```
+
+A.  Create a `ggpairs` plots of the data to verify that there are linear trends with the response but there is no multicollinearity with the predictors.
+```{r}
+ggpairs(mydata)
+```
+
+B.  From the videos and discussions, we can compute the regression coefficients by computing $\hat{\beta}=(X'X)^{-1}X'Y$.  The following code does this over a few steps this and also includes a verification of the results using the `lm` function. Run the code and verify yourself that matrix computations are correct.
+```{r, results='hide'}
+X<-model.matrix(~X1+X2,data=mydata) #Computing the design matrix
+XtX<-t(X)%*%X  #Computing X'X
+XtXinv<-solve(XtX)  #Computing inverse of X'X
+beta.hat<- XtXinv %*% t(X) %*% mydata$Y   #Computing final formula
+print("Matrix Result")
+beta.hat
+
+#Verifying
+print("Using lm")
+lm(Y~X1+X2,data=mydata)$coefficients
+```
+C.  Consider now that we did something rather silly and created a 3rd predictor variable which is just the sum of the first two predictors.
+```{r}
+mydata$X3=mydata$X1+mydata$X2
+```
+If we fit a model with all three predictors we will not get a coefficient for X3. The lm function is "smart enough" to check for perfect collinearity before making its computation.  Note that when we try to compute vifs, however, we get an error. The word "alias" is a synonym for perfectly correlated predictors. Evaluate the following code to verify for yourself.  To investigate the problem further, go through the matrix multiplication steps from part B using all 3 predictors and determine what part of the calculation creates the problem.
+```{r, eval=F}
+library(car)
+summary(lm(Y~X1+X2+X3,data=mydata))
+vif(lm(Y~X1+X2+X3,data=mydata))
+```
+
+Upon your investigation you should see an error that includes the word "singular". Matrices that are singular do not have an inverse.
+
+When predictors are not perfectly correlated we can still run the lm model. As your model inches closer and closer to having perfect collinearity, the computation breaks down. This creates the situations discussed under multicollinearity like the regression coefficients will change drastically and their standard errors are inflated. Recall that the SEs for regression coefficients are derived from $\sigma^2(X'X)^{-1}$ which also has an inverse calculation in it.

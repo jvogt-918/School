@@ -1,0 +1,216 @@
+---
+title: "Unit 9 Pre-Live Session"
+author: 'Johnny Vogt'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1:  Error Metrics
+Consider the following confusion matrix computed from a validation set. The "yes" outcome here is whether a person commits to purchasing an item over the phone (advertising). 
+
+```{r,echo=F}
+val<-matrix(c(6326,1638,120,958),2,2)
+rownames(val)<-c("PredNo","PredYes")
+colnames(val)<-c("TrueNo","TrueYes")
+val
+```
+
+A.  Compute by hand the sensitivity and specificity for the confusion matrix assuming "yes" is the positive class.
+
+Sensitivity = TY/(TY + PY) = 958/(958 +120) = 958/1078 = 0.889
+
+Specificity = TN/(TN + PN) = 6326/(6236 + 1638) = 6326/7874 = 0.803
+
+B.  Compute by hand the negative and positive predictive values.
+
+Positive Predictive Value = TP/( TP + PY (False Positve)) = 958/(958+1638) = 958/2596 = 0.369
+
+Negative Predictive Value = TN/(TN + PN (False Negative)) = 6326/(6326 + 120) = 6326/6446 = 0.981
+
+
+C.  What percentage of the entire validation set made a purchase?
+
+True Yes = 120 + 958 = 1078
+Total Sample = 6326 + 1638 + 120 + 958 =9042
+
+Percentage of people who make a purchase = 0.115 = 11.5%
+
+D.  Suppose the company has a list of 1000 potential new customers with which the model (with performance metrics you computed earlier) can be applied.  Suppose that 300 of these 1000 were predicted that they would make a purchase.  How many customers of these 300 that you predicted as "yes" will actually be a "yes"?  Which one of the previous metrics you calculated tells you this?
+
+300 * 0.369 = 110.7
+
+E.  (Something to chew on) Suppose that, for every sale, the company makes a profit of 200 dollars and it costs them 20 dollars for every unsuccessful sales pitch. They lose out on 200 dollars if they didn't identify a customer that would say "yes" to the campaign.  They lose 0 dollars for those they didn't call and would have said "no" to begin with. What do you think the expected net profit (after dealing with the cost) is when considering making the sales pitch to the 1000 prospective clients? What is the expected profit lossed (or missed) under this scenario?  Make whatever assumptions you need to come up with your answer, just state those assumptions along with your answer.
+
+False Positives: 300 - 111 = 189
+Expected Buyers: 0.119 * 1000 = 119
+False Negatives: 119-111 = 8
+
+Calcuating munnies
+Successfull Sale: 111 * 200 = $22200
+Unseccessful call: 189 * -20 = $-3780
+Missed Sale: 8 * -200 = $-1600
+
+net Profit: 22200 - 3780 - 1600 = $16,820
+
+## LDA Assumptions.
+Consider the following simulated data sets.  Based on what you got out of the videos, for each data set comment on whether you think a discriminant analysis tool would be appropriate and if so would it be better to fit an LDA or QDA model.
+
+1st Dataset : No Discriminate analysis tool would work well, very complex
+2nd Dataset: LDA
+3rd Dataset: QDA
+```{r, echo=F}
+library(ggplot2)
+#First Data set
+x1.cancer<-runif(200,0,.5)
+x1.cancer2<-runif(200,0,1)
+x2.cancer<-runif(200,0,1)
+x2.cancer2<-runif(200,.5,1)
+
+x1.healthy<-runif(400,.3,1)
+x2.healthy<-runif(400,0,.7)
+
+data=data.frame(status=rep(c("Cancer","Healthy"),each=400),x1=c(x1.cancer,x1.cancer2,x1.healthy),x2=c(x2.cancer,x2.cancer2,x2.healthy))
+
+p1<-ggplot(data,aes(x=x1,y=x2,colour=status))+geom_point(size=0.3)+geom_density2d()#+facet_wrap(~status)
+p1
+
+#Second Data set
+library(MASS)
+library(mvtnorm)
+set.seed(1234)
+dataYes<-mvrnorm(400,c(10,10),matrix(c(1,.8,.8,1),2,2,byrow=T))
+dataNo<- mvrnorm(400,c(10,7),matrix(c(1,.8,.8,1),2,2,byrow=T))
+full<-rbind(dataYes,dataNo)
+full<-data.frame(full)
+full$status<-rep(c("Cancer","Healthy"),each=400)
+full$status<-factor(full$status)
+names(full)[1:2]<-c("x1","x2")
+
+p2<-ggplot(full,aes(x=x1,y=x2,colour=status))+geom_point(size=0.3)+geom_density2d()#+facet_wrap(~status)
+p2
+
+
+#3rd Figure
+set.seed(1234)
+dataYes<-mvrnorm(400,c(10,10),matrix(c(1,.8,0.8,1),2,2,byrow=T))
+dataNo<- mvrnorm(400,c(10,7),matrix(c(1,-.2,-.2,1),2,2,byrow=T))
+full2<-rbind(dataYes,dataNo)
+full2<-data.frame(full2)
+full2$status<-rep(c("Cancer","Healthy"),each=400)
+full2$status<-factor(full2$status)
+names(full2)[1:2]<-c("x1","x2")
+
+p3<-ggplot(full2,aes(x=x1,y=x2,colour=status))+geom_point(size=0.3)+geom_density2d()#+facet_wrap(~status)
+p3
+
+
+```
+
+## Discussion 2: Confusion Matrix Sanity Checks 
+It is quite common for people to read confusion matrix results without paying enough attention to the details, in particular, what you want as output versus what **R** actually gives.  Using one of the previous data sets from the second discussion, consider we added multiple columns that defined the response variable using different strategies. The first is recoding Healthy and Cancer as 0 and 1, respectively. The second is recoding as Control and Sick. In all 3 settings the "positive" class is viewed as the Cancer group.
+```{r}
+full2$status2<-ifelse(full2$status=="Healthy",0,1)
+full2$status3<-factor(ifelse(full2$status=="Healthy","Control","Sick"))
+head(full2)
+```
+
+The following code runs an LDA model on the data and produces the confusion matrix on the training data itself.  This is done a number of times using slightly different sets of code.  Compare the resulting confusion matrices and summarize what is going on with the code and options. Please note that the CV part of the code and error metric is irrelevant here because LDA doesn't have any tuning parameters.
+```{r, eval=F}
+fitControl<-trainControl(method="repeatedcv",number=5,repeats=1,classProbs=TRUE, summaryFunction=mnLogLoss)
+set.seed(1234)
+
+#Version 1
+lda.fit<-train(status~x1+x2,
+               data=full2,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+#Computing predicted probabilities on the training data
+predictions <- predict(lda.fit, full2, type = "prob")[,"Cancer"]
+
+#Getting confusion matrix
+threshold=0.5
+lda.preds<-factor(ifelse(predictions>threshold,"Cancer","Healthy"),levels=c("Cancer","Healthy"))
+confusionMatrix(data = lda.preds, reference = full2$status)
+
+
+
+
+#Version2
+lda.fit<-train(status3~x1+x2,
+               data=full2,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+#Computing predicted probabilities on the training data
+predictions <- predict(lda.fit, full2, type = "prob")[,"Sick"]
+
+#Getting confusion matrix
+threshold=0.5
+lda.preds<-factor(ifelse(predictions>threshold,"Sick","Control"),levels=c("Sick","Control"))
+confusionMatrix(data = lda.preds, reference = full2$status3)
+
+
+#Version3
+lda.fit<-train(status3~x1+x2,
+               data=full2,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+#Computing predicted probabilities on the training data
+predictions <- predict(lda.fit, full2, type = "prob")[,"Sick"]
+
+#Getting confusion matrix
+threshold=0.5
+lda.preds<-factor(ifelse(predictions>threshold,"Sick","Control"))
+confusionMatrix(data = lda.preds, reference = full2$status3)
+
+
+
+
+#Version 4
+lda.fit<-train(status3~x1+x2,
+               data=full2,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+#Computing predicted probabilities on the training data
+predictions <- predict(lda.fit, full2, type = "prob")[,"Sick"]
+
+#Getting confusion matrix
+threshold=0.5
+lda.preds<-factor(ifelse(predictions>threshold,"Sick","Control"))
+confusionMatrix(data = lda.preds, reference = full2$status3,positive="Sick")
+
+
+
+#Version 5
+lda.fit<-train(status3~x1+x2,
+               data=full2,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+#Computing predicted probabilities on the training data
+predictions <- predict(lda.fit, full2, type = "raw")
+head(predictions)
+
+confusionMatrix(data = predictions, reference = full2$status3)
+
+
+
+#knn.preds<-factor(ifelse(predictions$knn>threshold,"Cancer","Healthy"),levels=c("Cancer","Healthy"))
+#confusionMatrix(data = knn.preds, reference = validate$status)
+
+```
+
+

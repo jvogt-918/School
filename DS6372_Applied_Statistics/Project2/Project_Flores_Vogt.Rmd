@@ -1,0 +1,420 @@
+---
+title: "Applied_Stat_Proj2"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries}
+library(ggplot2)
+library(caret)
+library(car)
+library(pROC)
+library(MASS)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(tidyr)
+```
+
+```{r Data Import and Prep}
+adult <- read.csv(file = "/Users/Owner/git/School/DS6372_Applied_Statistics/Project2/Data/adult.csv")
+
+adult_test <- read.csv(file = "/Users/Owner/git/School/DS6372_Applied_Statistics/Project2/Data/adult_test.csv")
+
+# Convert '?' and '' to NA
+adult[] <- lapply(adult, function(x) { x[x == "" | x == "?"] <- NA; x })
+adult_test[] <- lapply(adult_test, function(x) { x[x == "" | x == "?"] <- NA; x })
+
+adult <- na.omit(adult)
+adult_test <- na.omit(adult_test)
+
+# Factor conversion
+categorical_vars <- c("workclass", "education", "Marital.status", "occupation", "relationship", "race", "sex", "Native.country", "income")
+adult[categorical_vars] <- lapply(adult[categorical_vars], factor)
+adult_test[categorical_vars] <- lapply(adult_test[categorical_vars], factor)
+```
+
+```{r Data Structure and Summary}
+str(adult)
+summary(adult)
+colSums(is.na(adult))
+sum(duplicated(adult))
+```
+
+```{r EDA}
+# Numeric Distributions
+numeric_vars <- sapply(adult, is.numeric)
+num_df <- adult[, numeric_vars]
+
+ggplot(adult, aes(age, fill=income)) + geom_histogram(bins=30, alpha=0.7, position="identity") + labs(title="Age by Income")
+
+ggplot(adult, aes(Education.num, fill=income)) + geom_histogram(binwidth=1, alpha=0.7) + labs(title="Education Number by Income")
+
+ggplot(adult, aes(Hours.per.week, fill=income)) + geom_histogram(bins=30, alpha=0.7) + labs(title="Hours per Week by Income")
+
+ggplot(adult, aes(Capital.gain, fill=income)) + geom_histogram(binwidth=5000, alpha=0.7) + labs(title="Capital Gain by Income")
+
+ggplot(adult, aes(log1p(Capital.gain), fill=income)) + geom_histogram(bins=30, alpha=0.7) + labs(title="Log-Capital Gain by Income")
+
+ggplot(adult, aes(Capital.loss, fill=income)) + geom_histogram(binwidth=500, alpha=0.7) + labs(title="Capital Loss by Income")
+
+ggplot(adult, aes(log1p(Capital.loss), fill=income)) + geom_histogram(bins=30, alpha=0.7) + labs(title="Log-Capital Loss by Income")
+
+boxplot(num_df, main="Numeric Variables: Boxplots", outline=TRUE, col="skyblue", las=2)
+
+# Categorical Distributions
+ggplot(adult, aes(sex, fill=income)) + geom_bar(position="stack") + labs(title="Income by Sex")
+
+ggplot(adult, aes(education, fill=income)) + geom_bar(position="fill") + labs(title="Proportion Income by Education")
+
+ggplot(adult, aes(workclass, fill=income)) + geom_bar(position="fill") + labs(title="Proportion Income by Workclass") + theme(axis.text.x = element_text(angle=45, hjust=1))
+
+ggplot(adult, aes(x = race, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Race") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(adult, aes(x = occupation, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Occupation") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(adult, aes(x = Marital.status, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Marital Status") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(adult, aes(x = relationship, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Relationship") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(adult, aes(x = Native.country, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Native Country") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(adult, aes(x = workclass, fill = income)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion Income by Workclass") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Outlier Visualization
+ggplot(adult, aes(x = income, y = age, fill = income)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.25, size = 0.7, color = "black") +
+  labs(title = "Outlier Detection: Age by Income Group",
+       x = "Income Group", y = "Age")
+
+ggplot(adult, aes(x = income, y = Hours.per.week, fill = income)) +
+  geom_boxplot(outlier.colour = "red", alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 0.5, alpha = 0.2) +
+  labs(title = "Outlier Detection: Hours per Week by Income")
+
+ggplot(adult, aes(x = income, y = Education.num, fill = income)) +
+  geom_boxplot(outlier.colour = "red", alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 0.5, alpha = 0.2) +
+  labs(title = "Outlier Detection: Education Number by Income")
+
+ggplot(adult, aes(x = income, y = log1p(Capital.gain), fill = income)) +
+  geom_boxplot(outlier.colour = "red", alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 0.5, alpha = 0.2) +
+  labs(title = "Outlier Detection: Log Capital Gain by Income")
+
+ggplot(adult, aes(x = income, y = log1p(Capital.loss), fill = income)) +
+  geom_boxplot(outlier.colour = "red", alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 0.5, alpha = 0.2) +
+  labs(title = "Outlier Detection: Log Capital Loss by Income")
+
+ggplot(adult, aes(income, age, fill=income)) + geom_boxplot(outlier.colour="red", alpha=0.7) + geom_jitter(width=0.2, size=0.5, alpha=0.2) + labs(title="Age: Outlier Detection")
+
+long_adult <- adult %>% select(age, Education.num, Capital.gain, Capital.loss, Hours.per.week, income) %>% pivot_longer(cols = -income, names_to = "variable", values_to = "value")
+
+ggplot(long_adult, aes(income, value, fill=income)) + geom_boxplot(outlier.colour="red", alpha=0.7) + facet_wrap(~variable, scales="free_y") + labs(title="Boxplots: Numeric Variables by Income")
+
+# Correlation Analysis
+cor_matrix <- cor(num_df, use="pairwise.complete.obs")
+corrplot(cor_matrix, method="color", type="upper", addCoef.col="black", tl.srt=45, tl.col="black", number.cex=0.7)
+```
+
+```{r Baseline Logistic Regression Model}
+logit_model <- glm(income ~ age + workclass + fnlwgt + education + Education.num + Marital.status +
+                     occupation + relationship + race + sex + Capital.gain + Capital.loss +
+                     Hours.per.week + Native.country,
+                   data = adult, family = "binomial")
+summary(logit_model)
+
+logit_model_noednum <- glm(income ~ age + workclass + fnlwgt + education + Marital.status +
+                   occupation + relationship + race + sex + Capital.gain + Capital.loss +
+                   Hours.per.week + Native.country,
+                   data = adult, family = "binomial")
+summary(logit_model_noednum)
+```
+
+```{r Multicollinearity}
+vif_values <- vif(logit_model_noednum)
+print(vif_values)
+```
+
+```{r Feature Selection}
+step_model <- step(logit_model_noednum, direction = "both")
+summary(step_model)
+```
+
+```{r Coefficients}
+odds_ratios <- exp(coef(step_model))
+percent_change <- (odds_ratios - 1) * 100
+coef_table <- data.frame(OddsRatio = odds_ratios, PercentChange = percent_change)
+print(coef_table)
+```
+
+```{r Diagnostics}
+plot(step_model)
+```
+
+```{r Prediction}
+# Get all factor columns
+factor_cols <- names(adult)[sapply(adult, is.factor)]
+
+# Match levels for all categorical variables in test set to training set
+for (col in factor_cols) {
+  levels(adult_test[[col]]) <- levels(adult[[col]])
+}
+
+
+test_probs <- predict(step_model, newdata = adult_test, type = "response")
+test_preds <- ifelse(test_probs > 0.5, ">50K", "<=50K")
+```
+
+```{r Confusion Matrix & Performance}
+confusionMatrix(factor(test_preds), factor(adult_test$income))
+```
+
+```{r ROC & AUC}
+library(pROC)
+roc_obj <- roc(adult_test$income, test_probs)
+plot(roc_obj, main="ROC Curve")
+auc(roc_obj)
+```
+
+```{r Optimizing Threshold}
+best <- coords(roc_obj, "best", ret="threshold")
+optimal_threshold <- 0.1593779
+opt_preds <- ifelse(test_probs > optimal_threshold, ">50K", "<=50K")
+
+confusionMatrix(factor(opt_preds), factor(adult_test$income))
+```
+
+```{r Complex Model}
+logit_model_complex <- glm(income ~ age * education + poly(age, 2) +
+                            workclass + Marital.status + occupation +
+                            relationship + race + sex + Capital.gain +
+                            Capital.loss + Hours.per.week + Native.country,
+                          data = adult, family = "binomial")
+summary(logit_model_complex)
+
+complex_probs <- predict(logit_model_complex, newdata = adult_test, type = "response")
+
+roc_complex <- roc(adult_test$income, complex_probs)
+plot(roc_complex)
+auc(roc_complex)
+complex_threshold <- coords(roc_complex, "best", ret = "threshold")
+complex_threshold <- as.numeric(complex_threshold)
+complex_preds <- ifelse(complex_probs > complex_threshold, ">50K", "<=50K")
+cm_complex <- confusionMatrix(factor(complex_preds), factor(adult_test$income))
+
+complex_sens <- cm_complex$byClass["Sensitivity"]
+complex_spec <- cm_complex$byClass["Specificity"]
+complex_ppv  <- cm_complex$byClass["Pos Pred Value"]
+complex_npv  <- cm_complex$byClass["Neg Pred Value"]
+complex_acc  <- cm_complex$overall["Accuracy"]
+```
+
+```{r LDA model}
+lda_model <- lda(income ~ age + education + workclass + sex + Capital.gain +
+                 Capital.loss + Hours.per.week + Native.country,
+                 data = adult)
+lda_probs <- predict(lda_model, newdata = adult_test)$posterior[,2]
+roc_lda <- roc(adult_test$income, lda_probs)
+auc(roc_lda)
+
+lda_threshold <- coords(roc_lda, "best", ret = "threshold")
+lda_threshold <- as.numeric(lda_threshold)
+lda_pred_class <- ifelse(lda_probs > lda_threshold, ">50K", "<=50K")
+cm_lda <- confusionMatrix(factor(lda_pred_class), factor(adult_test$income))
+
+lda_sens <- cm_lda$byClass["Sensitivity"]
+lda_spec <- cm_lda$byClass["Specificity"]
+lda_ppv <- cm_lda$byClass["Pos Pred Value"]
+lda_npv <- cm_lda$byClass["Neg Pred Value"]
+lda_acc <- cm_lda$overall["Accuracy"]
+
+```
+
+```{r QDA Model}
+# Select predictors with high data completeness and low collinearity
+qda_vars <- c("age", "Hours.per.week")
+
+# Ensure only complete cases (no missing values) are used
+adult_qda <- adult[complete.cases(adult[, qda_vars]), ]
+adult_test_qda <- adult_test[complete.cases(adult_test[, qda_vars]), ]
+
+# Fit QDA model on training data
+qda_model <- qda(income ~ age + Hours.per.week, data = adult_qda)
+
+# Predict posterior probabilities on test set
+qda_pred <- predict(qda_model, newdata = adult_test_qda)
+qda_probs <- qda_pred$posterior[,2]  # Probability for ">50K"
+
+# Compute ROC curve and AUC
+roc_qda <- roc(adult_test_qda$income, qda_probs)
+plot(roc_qda, main = "QDA ROC Curve")
+auc(roc_qda)
+
+# Find optimal threshold using ROC analysis
+qda_threshold <- coords(roc_qda, "best", ret = "threshold")
+qda_threshold <- as.numeric(qda_threshold)
+
+# Classify predictions using optimal threshold
+qda_pred_class <- ifelse(qda_probs > qda_threshold, ">50K", "<=50K")
+
+# Build results data frame and filter out NA
+results_df <- data.frame(pred = qda_pred_class, actual = adult_test_qda$income)
+results_df <- results_df[!is.na(results_df$pred) & !is.na(results_df$actual), ]
+income_levels <- c("<=50K", ">50K")
+results_df$pred <- factor(results_df$pred, levels = income_levels)
+results_df$actual <- factor(results_df$actual, levels = income_levels)
+
+# Confusion matrix and performance metrics
+confusionMatrix(results_df$pred, results_df$actual)
+
+# Optional: show prediction distribution for sanity check
+table(results_df$pred)
+table(results_df$actual)
+
+cm_qda <- confusionMatrix(results_df$pred, results_df$actual)
+
+qda_sens <- cm_qda$byClass["Sensitivity"]
+qda_spec <- cm_qda$byClass["Specificity"]
+qda_ppv <- cm_qda$byClass["Pos Pred Value"]
+qda_npv <- cm_qda$byClass["Neg Pred Value"]
+qda_acc <- cm_qda$overall["Accuracy"]
+
+```
+
+```{r Decision Tree}
+library(rpart)
+library(rpart.plot) # For nice tree plots
+
+# Select top predictors for interpretability and minimal collinearity
+tree_vars <- c("age", "workclass", "education", "Marital.status", 
+               "occupation", "relationship", "race", "sex", 
+               "Capital.gain", "Capital.loss", "Hours.per.week", "Native.country")
+
+# Use only complete cases for chosen predictors in both train and test
+adult_tree <- adult[complete.cases(adult[, tree_vars]), ]
+adult_test_tree <- adult_test[complete.cases(adult_test[, tree_vars]), ]
+
+# Ensure factor levels in test match those in train for all categorical variables
+factor_vars <- c("workclass", "education", "Marital.status", "occupation",
+                 "relationship", "race", "sex", "Native.country")
+for (col in factor_vars) {
+  levels(adult_test_tree[[col]]) <- levels(adult_tree[[col]])
+}
+
+# Fit the decision tree
+tree_model <- rpart(income ~ ., data = adult_tree[, c(tree_vars, "income")], method = "class",
+                    control = rpart.control(cp = 0.01, xval = 10))
+
+# Plot the tree for interpretability
+rpart.plot(tree_model, extra = 104, under = TRUE, type = 2, faclen = 0, cex = 0.6)
+
+# Predict class probabilities (for >50K) in test set
+tree_pred_probs <- predict(tree_model, newdata = adult_test_tree, type = "prob")[,2]
+
+# ROC and AUC
+roc_tree <- roc(adult_test_tree$income, tree_pred_probs)
+plot(roc_tree, main = "ROC Curve: Decision Tree")
+auc(roc_tree)
+
+# Optimal threshold from ROC
+tree_threshold <- coords(roc_tree, "best", ret = "threshold")
+tree_threshold <- as.numeric(tree_threshold)
+
+# Predict classes using optimal threshold
+tree_pred_class <- ifelse(tree_pred_probs > tree_threshold, ">50K", "<=50K")
+
+# Build results data frame and remove incomplete predictions
+tree_df <- data.frame(pred = tree_pred_class, actual = adult_test_tree$income)
+tree_df <- tree_df[!is.na(tree_df$pred) & !is.na(tree_df$actual), ]
+
+# Ensure proper factor levels
+income_levels <- c("<=50K", ">50K")
+tree_df$pred <- factor(tree_df$pred, levels = income_levels)
+tree_df$actual <- factor(tree_df$actual, levels = income_levels)
+
+# Confusion matrix and model performance metrics
+confusionMatrix(tree_df$pred, tree_df$actual)
+
+# (Optional) View prediction distribution for sanity check
+table(tree_df$pred)
+table(tree_df$actual)
+
+cm_tree <- confusionMatrix(tree_df$pred, tree_df$actual)
+tree_sens <- cm_tree$byClass["Sensitivity"]
+tree_spec <- cm_tree$byClass["Specificity"]
+tree_ppv <- cm_tree$byClass["Pos Pred Value"]
+tree_npv <- cm_tree$byClass["Neg Pred Value"]
+tree_acc <- cm_tree$overall["Accuracy"]
+
+```
+
+```{r Model Comparison}
+# For each model, get the confusionMatrix object
+cm_baseline <- confusionMatrix(factor(opt_preds), factor(adult_test$income))
+cm_complex <- confusionMatrix(factor(complex_preds), factor(adult_test$income)) # replace complex_preds with your actual predictions for complex LR
+cm_lda     <- confusionMatrix(factor(lda_pred_class), factor(adult_test$income)) # replace lda_pred_class as needed
+cm_qda     <- confusionMatrix(results_df$pred, results_df$actual) # from your QDA chunk
+cm_tree    <- confusionMatrix(tree_df$pred, tree_df$actual)       # from your tree chunk
+
+# For each confusion matrix object, extract these metrics:
+# Baseline LR
+baseline_sens <- cm_baseline$byClass["Sensitivity"]
+baseline_spec <- cm_baseline$byClass["Specificity"]
+baseline_ppv  <- cm_baseline$byClass["Pos Pred Value"]
+baseline_npv  <- cm_baseline$byClass["Neg Pred Value"]
+baseline_acc  <- cm_baseline$overall["Accuracy"]
+
+# Repeat for other models:
+complex_sens <- cm_complex$byClass["Sensitivity"]
+# ...etc for others
+
+comparison_table <- data.frame(
+  Model = c("Baseline LR", "Complex LR", "LDA", "QDA", "Tree"),
+  Sensitivity = c(baseline_sens, complex_sens, lda_sens, qda_sens, tree_sens),
+  Specificity = c(baseline_spec, complex_spec, lda_spec, qda_spec, tree_spec),
+  AUROC = c(auc(roc_obj), auc(roc_complex), auc(roc_lda), auc(roc_qda), auc(roc_tree)),
+  Threshold = c(optimal_threshold, complex_threshold, lda_threshold, qda_threshold, tree_threshold),
+  PPV = c(baseline_ppv, complex_ppv, lda_ppv, qda_ppv, tree_ppv),
+  NPV = c(baseline_npv, complex_npv, lda_npv, qda_npv, tree_npv),
+  Accuracy = c(baseline_acc, complex_acc, lda_acc, qda_acc, tree_acc),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(comparison_table, caption = "Model Comparison Table")
+
+plot(roc_obj, col = "red", main = "ROC Curves for All Models")  # Baseline
+plot(roc_complex, col = "blue", add = TRUE)
+plot(roc_lda, col = "green", add = TRUE)
+plot(roc_qda, col = "purple", add = TRUE)
+plot(roc_tree, col = "orange", add = TRUE)
+legend("bottomright", legend = c("Baseline LR", "Complex LR", "LDA", "QDA", "Tree"),
+       col = c("red", "blue", "green", "purple", "orange"), lwd = 2)
+
+```

@@ -1,0 +1,196 @@
+---
+title: "Unit 11 HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Conceptual Questions
+
+## A.  What is the main issue with fitting an MLR on a binary response coded as 0 or 1?
+
+The main issue with using **Multiple Linear Regression** for binary outcomes is that MLR will predict value that are less than 0 and greater than 1. This creates an issue with trying to predict and "yes" or "no". Since we need to predict the probability of an out come being one or the other (binary), the response needs to be between 0 and 1, in order to represent a probability.  
+
+## B.  What must we do to a logistic regression coefficient to interpret it as an odds ratio?
+
+We would need to **exponentiate the coefficient** in order to interpret it in to an odds ratio.
+
+## C.  If we wanted to interpret an odds ratio for a 20-unit increase (rather than a one-unit increase) of a continuous predictor, what is the general formula to obtain this estimate?
+
+If you had wanted to interpret the odds ratio for a 20 unit increase, you would need to multiply the coefficient by 20 before exponentiating. 
+
+## D.  A logistic regression model was fitted to a data set with the following equation $log \Big( \frac{\pi}{(1-\pi)}\Big)= -4+.8X$.  What is the predicted probability of the positive class (event) occurring for a new observation at $X=3.2$?
+
+   \[
+   \text{Log-odds} = -4 + 0.8 \times 3.2 = -1.44
+   \]
+
+   \[
+   \text{odds} = e^{-1.44} \approx 0.237
+   \]
+
+   \[
+   \pi = \frac{0.237}{1 + 0.237} \approx 0.191
+   \]
+
+The probability of a positive class is about 19%
+
+# Coronary Artery Disease and Age
+
+## A.  In the pre-live session, we examined the effects of sex and ECG on whether a person has coronary artery disease.  Age most certainly has an impact as well.  Go back and provide an exploratory analysis on age using the CAD data set.  Include a loess plot, summary statistics for age by disease status, and a box plot of age by disease status.  Comment on your findings.
+
+```{r CAD EDA}
+library(ggplot2)
+library(dplyr)
+
+cad <- read.csv(file = "coronary.csv")
+
+#summary Stats
+summary_stat <- cad %>%
+  group_by (CAD) %>%
+  summarise(
+    count = n(),
+    mean_age = mean(AGE),
+    sd_age = sd(AGE),
+    min_age = min(AGE),
+    q1 = quantile(AGE, 0.25),
+    median_age = median(AGE),
+    q3 = quantile(AGE, 0.75),
+    max_age = max(AGE)
+  )
+print(summary_stat)
+
+#BP of Age and Disease Status
+ggplot(cad, aes(x = CAD, y = AGE, fill = CAD)) +
+  geom_boxplot() +
+  labs(title = "BoxPlot of Age by Disease Status", x = "Disease Status", y = "AGE")
+
+#LOESS Plot
+#Need to Convert CAD into 1s and 0s
+
+cad$CAD_bin <- ifelse(cad$CAD == "Yes", 1, 0)
+
+ggplot(cad, aes(x = AGE, y = CAD_bin)) +
+  geom_jitter(height = 0.05, width = 0, alpha = 0.4) + 
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  labs(title = "Loess Plot", x = "Age", y = "CAD Probability")
+```
+At a high level, it seems that the group of people that have no symptoms of any CAD, have a lower average (**mean/median**) age, this could just be biased by people concerned with heart health tend to be older people rather than younger people, so the introduction of CAD in the individuals in the study could be biased introduced in the sample. The Boxplots further supports the argument that people at an older age are diagnosed with CAD, although the median of both are within 2 years of each other. The LOESS plot suggests that the older you get, the probability of being diagnosed with CAD increases. There is an interesting dip around the late 40s/Early 50, this is probably because there are no representation of people being diagnosed with CAD at around that age in the sample. 
+
+## B.  Perform a logistic regression analysis using age.  Provide a formal write-up of the hypothesis test and interpret the coefficient.  Provide a 95 percent confidence interval as well.
+```{r CAD log reg. Analysis}
+glm_cadage <- glm(CAD_bin ~ AGE, data = cad, family = binomial)
+
+summary(glm_cadage)
+
+confint(glm_cadage)
+
+```
+### Hypothesis Test
+**HNull** : Age has **no** effect on the odds of CAD (BAGE = 0)
+
+**HAlt** : Age **does** have an effect on the odds of CAD (BAge != 0)
+
+**BAge** = 0.08006
+
+**95% Conf. Int.** : 0.024 - 0.142
+
+**P-Value** = 0.0075
+
+For every one unit of age (Year), the odd s of being diagnosed with CAD increase by approximately 0.08, which is roughly 8% per year. At a 95% confidence, the interval for the Age Coefficient ranges from 0.024 - 0.142.Since 0 is outside of the range, we are able to assume that the Age has a statistically significant effect on the odds of being diagnosed with CAD. 
+
+# Gas Mileage and Engine Size 
+The following code modifies the miles per gallon data set by converting the response to a binary outcome and cleans up the data set a little bit including dropping the three and five cylinder vehicles.
+```{r pressure, echo=FALSE}
+library(ISLR)
+newAuto<-Auto
+#Creating a categorical response for illustrative purposes.
+newAuto$mpg<-factor(ifelse(Auto$mpg>median(Auto$mpg),"High","Low"))
+newAuto$cylinders<-factor(newAuto$cylinders)
+#Removing data with 3 and 5 cylinders and making sure are R treats the predictor with just 3 levels and not 5.
+newAuto<-newAuto[-which(newAuto$cylinders %in% c(3,5)),]
+newAuto$cylinders<-factor(newAuto$cylinders)
+head(newAuto)
+
+```
+
+## A.  Provide an exploratory analysis of the relationship of the categorical Miles per gallon variable and the number of cylinders. Include at least one graphic and summary proportions.  Explain what your results are saying.
+
+```{r EDA}
+
+#Summary
+summary_auto <- newAuto %>%
+  group_by(cylinders, mpg) %>%
+  summarise(count = n()) %>%
+  mutate(proportion = count /sum(count))
+print(summary_auto)
+
+#Bar Chart High vs. Low MPG by Cylin.
+
+ggplot(newAuto, aes(x = cylinders, fill = mpg)) +
+  geom_bar(position = "fill") +
+  labs(title = "High Vs. Low MPG", y = "Proportion", x = "Mpg")
+
+#Loess Plot
+newAuto$mpg_bin <- ifelse(newAuto$mpg == "High", 1, 0)
+
+ggplot(newAuto, aes(x = horsepower, y = mpg_bin, color = cylinders)) +
+  geom_jitter(height = 0.05, width = 0, alpha = 0.3) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(title = "LOESS by Cylinder", x = "Horsepower",
+       y = "Probability of High MPG")
+```
+
+Looking at the proportions between each Cylinders, 6 and 8 most cars have a low MPG and 4 has a high mpg. The bar plot further supports this claim that when a vehicle has more cylinders, it will likely have a lower mpg. The LOESS plot provides a in-depth look that adds another wrinkle to the analysis by overlaying horsepower. You are able to see that each cylinder has a different minimum horsepower, adding that the proportion of cars with a High MPG have a lower horsepower. The new layer may lead us towards trying to factor Horsepower as well, and observe the proportions. 
+
+## B.  Perform a logistic regression model using just the single predictor cylinders.  Provide a good interpretation of the coefficients that makes the most sense for this problem.
+
+```{r Log Regression }
+auto_log <- glm(mpg_bin ~ cylinders, data = newAuto, family = binomial)
+summary(auto_log)
+confint(auto_log)
+```
+
+Using 4 cylinders as the reference. Cars with 4 Cylinders have a coefficient of 2.19, which turns to 0.8999 after exponentiating it, giving us a percentage of 89% chance that a car with a 4 Cylinder Engine of having a high MPG. For 6-Cylinder cars, the effect (-4.0704) to the reference gives us a coefficient of -1.88 and after transformation, the probability of having a high mpg drops to 13.2%. Moving to an 8-cylinder car, the effect (-5.6928) to the reference  give us -3.5012. Exponentiating -3.052 provides us with 0.030161168 giving us a probability of 3% chance of having high MPG witha 8-Cylinder Car. 
+
+## C. Provide an odds ratio for all three comparisons involving the cylinder groups?  (four vs. six, four vs. eight, and six vs. eight)
+
+```{r C Odds Ratio}
+coefs <- coef(auto_log)
+OR_4v6 <- exp(coefs["(Intercept)"] + coefs["cylinders6"]) / exp(coefs["(Intercept)"])
+OR_4v8 <- exp(coefs["(Intercept)"] + coefs["cylinders8"]) / exp(coefs["(Intercept)"])
+OR_6v8 <- exp(coefs["(Intercept)"] + coefs["cylinders8"]) / exp(coefs["(Intercept)"] + coefs["cylinders6"])
+OR_table <- data.frame(Comparison = c("4 vs 6","4 vs 8","6 vs 8"), OddsRatio = c(OR_4v6,OR_4v8,OR_6v8))
+print(OR_table)
+```
+**4 vs 6** : The odds that a 4-cylinder car having a high MPG are roughly 59 times (1/0.017) higher than a 6-Cylinder car.
+
+**4 vs 8** : The odds that a 4-cylinder car having a high mpg are roughly 294 times higher (1/0.0033) than a 8-cylinder car. 
+
+**6 vs 8** : The odds that a 6-cylinder car having a high mpg are roughly 5 times (1/0.196) higher than a 8-cylinder car. 
+
+## Exercise 4:  Quick Investigation
+Suppose a friend came to you with a data set that you have pinned as a logistic regression problem.  Suppose he gives you the data set to analyze.  The response is binary and the predictor is continuous.  Explore this data set to determine whether logistic regression will indeed work for this data set and if so, complete the analysis and provide a generic interpretation of the coefficients.  If it is not appropriate, explain.
+```{r x y }
+setwd("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit 11/HW/")
+help<-read.csv("Investigate.csv",stringsAsFactors = T)
+head(help)
+
+ggplot(help, aes(x = x, y = as.numeric(as.character(y)))) +
+  geom_jitter(height = 0.04, width = 0, alpha = 0.5, color = "blue") +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), 
+              se = TRUE, color = "red") +
+  labs(title = "Logistic Regression")
+
+logxy <- glm(y ~ x, data = help, family = binomial)
+
+summary(logxy)
+
+confint(logxy)
+```
+
+The estimate for x is 0.54 with a 95% Confidence Interval ranging from 0.04 = 1.120 and a p-value of 0.043. Every one unit increase of x increase the odds of obtaining a classification of 1 for y by 71%.  At a 95% confidence level, the relationship is statistically significant, shown by the p-value of 0.043. In summary, the higher x value the higher odds of y being 1. 

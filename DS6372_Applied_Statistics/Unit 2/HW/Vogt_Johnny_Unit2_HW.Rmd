@@ -1,0 +1,224 @@
+---
+title: "Vogt_Johnny_Unit2_HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Excercise 1
+A.  Briefly explain the bias variance trade off as a concept.
+
+Effectively its almost like a see-saw, on one side there is bias and the other has variance. As you make your model more complex to the dataset, it effectively conforms to the dataset and creates more variance to it. If you make your model TOO simple, than the model may have too much bias. The key is to find the balance inbetween the two to level out the "seesaw"
+
+B.  If a knn model performs poorly using a value of $k=1$, then is it suffering due to bias or variance?
+
+With a very low knn such as 1, the nearest neight is usually a datapoint extremely simiarl to itself, this could create overfitting and low bias, but higher variaance. 
+
+C.  What is the main purpose of feature selection?
+
+Feature selecting is used to reduce the complexity of the model, helping us try to simplify the model and show us what is statistically insignificant through each module's calculations. 
+
+D.  When using glmnet, what does the penalty term effectively do to your regression model? For example, what does it do if the penalty term is very large? 
+
+The "lambda" controls how much effect each predictor has on the model. If the penalty is VERY large, than the effect of each predictor becomes very low and such a model would likley to have very little to no predictors on it. 
+
+
+## Exercise 2:  Using GLMNET
+
+In the homework assignment for unit 1, we examined the residuals of various polynomial fits to a data set to determine roughly how complex of a polynomial fit is needed.  With our new found knowledge of GLMNET and cross validation, we can investigate this a bit more realistically. The data set is generated below. 
+
+Use the `caret` package and codes from prelive to perform a LASSO model ($\alpha=1$) with GLMNET with potentially up to 10 polynomial terms and determine what highest order degree is needed. Use 5-fold cross validation. Provide the necessary output and brief explanation to justify your answer.
+
+Using a blend of Lass and Ridge, the model preformed best with a penalization of 0.497118. Only x5/7/10 were removed from the model after the 5 fold CV, since after the penalization was placed, these three predictors had minimal affect to the performance of the model. 
+
+```{r}
+set.seed(1234)
+x<-runif(100,-6,6.5)
+trend<- 2*x^4-2*x^3-50*x^2+100*x+2
+y<-trend+rnorm(100,0,100)
+plot(x,y)
+
+df <- data.frame(
+  y = y,
+  x1 = x,
+  x2 = x^2,
+  x3 = x^3,
+  x4 = x^4,
+  x5 = x^5,
+  x6 = x^6,
+  x7 = x^7,
+  x8 = x^8,
+  x9 = x^9,
+  x10 = x^10
+)
+
+library(caret)
+
+fitControl <- trainControl(method = "cv", number = 5) # 5-fold CV!
+
+lasso.fit <- train(
+  y ~ .,
+  data = df,
+  method = "glmnet",
+  trControl = fitControl,
+)
+
+print(lasso.fit)
+plot(lasso.fit)
+best_lambda <- lasso.fit$bestTune$lambda
+coef(lasso.fit$finalModel, s = best_lambda)
+
+```
+
+## Exercise 3: Feature selection is not a fix all
+When people start to learn how to build predictive models, they tend to focus on building the model and do not think enough about what the model is trying to do.  In the case of linear regression, we are fitting linear trends unless we are adding complexity via transformations, polynomial terms, and interaction terms.
+
+Consider the following data set located in the `ISLR` package which contains the salary (in thousands) of Major League baseball players as well as some of their performance statistics both currently and over their career. The variables that begin with the letter C such as CHits stands for the number of hits in their career versus the variable Hits, which is just the number of hits they have on the current salaries.  
+
+```{r}
+library(ISLR) #For the baseball data set
+Hitters2 =na.omit(Hitters)
+which(rownames(Hitters2)=="-Mike Schmidt")
+Hitters2<-Hitters2[-173,]
+
+```
+
+Suppose a novice data analyst runs the following regression model to perform feature selection.  They will use this model to not only predict future Salaries of players that were not included in the study but also provide interpretation as to which statistics are associated to Salary.
+```{r ,echo=T, results='hide'}
+library(caret)
+set.seed(1234)
+fitControl<-trainControl(method="repeatedcv",number=10,repeats=1) 
+glmnet.fit<-train(Salary~.,
+               data=Hitters2,
+               method="glmnet",
+               trControl=fitControl
+               )
+opt.pen<-glmnet.fit$finalModel$lambdaOpt 
+coef(glmnet.fit$finalModel,opt.pen)
+glmnet.fit
+```
+
+A. Although you can predict with a glmnet model, it doesn't offer any traditional hypothesis testing or diagnostics of the model fit.  Use the traditional `lm` function to fit a regression model including only the predictors that the glmnet function call above suggests.  Provide the residual plots of the model and provide commentary on what you see.
+
+I see some fanning on the "Resid. vs. Fitted Plot", suggesting that the model doesn't fit well. The QQ Plots show that the residiual distributions have heavier tails than a normal distribution would have. This suggest that the High and Low values are pretty far from the center. On the Scale plot, there appears to be some fanning, but on the right sid eof the plot, there are alot less values, so its harder to determine whether the residuals have homoscedasticity, since there are not many datapoints on the higher end. But if I had to make a determination, there appears to be a visual pattern of a fan effect, showing that the variance of the residual increase as the plot continues. In the leverage plot, There appears to be a few outliers that have high amount of leverage, but do are not influential enough to have an effect on the model. 
+
+```{r}
+lm.fit <- lm(Salary ~ 
+               Hits + 
+               Runs + 
+               RBI + 
+               Walks + 
+               CHits + 
+               CHmRun + 
+               CRuns + 
+               League + 
+               Division + 
+               PutOuts + 
+               Assists + 
+               Errors, 
+             data = Hitters2)
+par(mfrow = c(2,2))
+plot(lm.fit)
+par(mfrow = c(1, 1))
+```
+  
+B. Compute the VIFs of the model.  
+
+```{r}
+library(car)
+vif(lm.fit)
+```
+
+C. Consider the following plot.  Remake this plot two additional ways:  one logging the salary and two logging both salary and career RBIS. Which setting provides the most evidence of getting a good fit with a regression model?
+Loggin both seems to fit the best with regression model. Although its not an ideal regression line, neither do the other two plots have a straight line. At least when you look at the plot with both values "logged", the points seems to have a better spread than the other two plots. 
+```{r}
+library(ggplot2)
+ggplot(Hitters2,
+       aes(
+         x=CRBI,
+         y=Salary,
+         color=League))+
+  geom_point()+
+  geom_smooth(method='loess',
+              formula='y~x')+
+  facet_wrap(~League)
+
+ggplot(Hitters2,
+       aes(
+         x=CRBI,
+         y=log(Salary),
+         color=League))+
+  geom_point()+
+  geom_smooth(method='loess',
+              formula='y~x')+
+  facet_wrap(~League)
+
+ggplot(Hitters2,
+       aes(
+         x=log(CRBI),
+         y=log(Salary),
+         color=League))+
+  geom_point()+
+  geom_smooth(method='loess',
+              formula='y~x')+
+  facet_wrap(~League)
+
+```
+
+
+D. The feature selection tool is somewhat automated. You feed it the response and predictors, and it does the rest.  Using your previous answers, write a short explanation to a new analyst on why feature selection tools are not a fix-all to the entire modeling process.
+
+Feature Selection tools run calculations based solely on numbers. They use tests and penalties and model perfomrance metrics to determine which predictors should be dropped and kept. The problem with these tools is that they do not have domain knowledge nor do they have any true meaning of what the data means. The tools don't capture whether the data was recorded properly or even if the data are correlated through some non-quantitatve factor. Although these feature selection tools are are VERY helpful, they are not a be-all or end-all tool, they should be complimented with a skillfull analyst along with someone that have domain knowledge in the data that you're measuring/predicting. 
+
+E. Examine the following plot that plots penalized regression coefficients versus their penalty term. Provide a high level explanation as to why all of the coefficients are 0 when the log lambda value is 8.
+
+The reason why all the coefficients are zero is because the penalty is LARGE at that lambda value. Making it hard for the GLM function to justify any of the predictors to be useful.
+```{r}
+library(rgl)
+knitr::knit_hooks$set(webgl=hook_webgl)
+plot(glmnet.fit$finalModel, xvar = "lambda", label = TRUE)
+```
+
+F. Use the `caret` package to run a 10-fold cross validation to determine an appropriate $k$ when fitting all the numeric predictors (no transformation) to regress Salary (no transformation). Investigate the possible values $k=1,2,3,4,5,6,7,8,9,10,20,30$ using the following option inside of the `train` function.
+```{r, eval=F}
+
+library(caret)
+tuneGrid=expand.grid(k=c(1:10,20,30)) #Do not run in line.  Must be added inside of train function call. Google is your friend if stuck.
+
+num_vars <- sapply(Hitters2, is.numeric)
+hitters_numeric <- Hitters2[, num_vars]
+
+knn.fit <- train(
+  Salary ~ .,
+  data = hitters_numeric,
+  method = "knn",
+  trControl = fitControl,
+  tuneGrid = expand.grid(k = c(1:10, 20, 30))
+)
+
+print(knn.fit)
+# Best k
+best_k <- knn.fit$bestTune$k
+
+# Best RMSE for KNN
+best_knn_rmse <- knn.fit$results$RMSE[knn.fit$results$k == best_k]
+
+# Best k
+best_k <- knn.fit$bestTune$k
+
+# Best RMSE for KNN
+best_knn_rmse <- knn.fit$results$RMSE[knn.fit$results$k == best_k]
+
+best_k
+best_knn_rmse
+```
+
+G. Compare the RMSE from the CV results of the best $k$ and compare that to the best RMSE from the glmnet fit made by the analyst previously.  Which one wins out?  
+
+See Above Chunk
+k = 3 and the RMSE for it is 296.0675
+

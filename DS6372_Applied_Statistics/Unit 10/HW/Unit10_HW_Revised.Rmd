@@ -1,0 +1,79 @@
+---
+title: "Unit 10 HW"
+author: Johnny Vogt
+date: ''
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Libraries
+```{r}
+library(epitools)
+```
+
+## Exercise 1: Conceptual Questions
+
+  1.  State under what circumstance a difference in proportion confidence interval should not be used in favor of an odds ratio metric.
+  
+It depends on the design of the study. In particular, you don't want to use a difference in porportion CI because the observation study method doesn't allow us to estimate risks or porbabilites accurately to an entire population. 
+  
+  2.  Under what sampling schemes can a hypothesis test be generally worded as a "test for association", rather than a test for difference in proportion, odds, or relative risk?
+  
+Using "test for association" should be used for case-control or cross-sectional studies. Since the sampling for case-control studies are conditional on the outcome, only the association can be tested not an absolution risk/proportion. Same with Cross-Sectional studies, they are studies done at a single point in time rather than repeated over time 
+  
+  3.  Give an example of study that could not be conducted in a prospective manner due to either logistical or ethical considerations.
+  
+Trying to determine if childhood abuse determines if a person is drops out of high school or earlier. Trying to find children who are actively being abused or to wait for them to be abused and not acting would be unethical and immoral. 
+
+  4.  What metric allows for the following interpretation: "The chances of a person getting the flu who has not taken the flu vaccine is 30 percent (1.3 times) higher than someone who has taken the flu vaccine"?
+  
+The Relative Risk/Risk Ratio allows for the interpretation in the question. 
+
+## Exercise 2: Vitamin C Study  
+Consider the vitamin C study previously described.  Use the workflow discussed in class to write a final report that includes what the study design is, the report and conclusion of a test, and report and conclusion of a confidence interval.
+
+```{r}
+VitC<-matrix(c(335,76,302,105),2,2,byrow=T)
+dimnames(VitC)<-list(Exposure=c("Placebo","Vit C"),"Arrested"=c("Cold","No Cold"))
+VitC
+
+chisq.test(VitC)
+epitab(VitC, method = "oddsratio")
+```
+###Report 
+Study Design: Randomized Controlled Trial
+- The participants of the study would be randomly asssigned to either a placebo or vitamin C group and they would seperated to the Cold and No Cold group over a period of time. 
+
+Test Report:
+- The test statistic = 5.92 and the P-Value is 0.01497. At a significance level of 0.05, theevidence is statiscially significant to suggest that Vitamin C is associated with a a difference in the odds of developing a cold when complated to the placebo
+
+CI Report.
+The odds of not catching a cold were estimated to be 1.53 times higher for participants given Vitamin C rather than the places. At a 95% Confidence Interval, the odd ratio is between 1.098 and 2.139 indicating that the effect of vitamin C is statistically significant enough to suggest that there is a real difference between Vitamin C and the Placebo. 
+
+## Exercise 3: Breast Cancer and Alcohol
+Researchers took random samples of 534 women who had breast cancer and 1044 women who did not have cancer.  They reached out individually and asked the question, "Do you have fewer than four drinks per week?" of which they could answer yes or no.  The table of the results follow.
+
+The goal of the study was to assess the risk of drinking on breast cancer.  Use the workflow discussed in class to write a final report that includes what the study design is, the test being used, the conclusion of the test, and interpretation of a confidence interval. 
+
+```{r}
+Drinks<-matrix(c(330,658,204,386),2,2,byrow=T)
+dimnames(Drinks)<-list(Drinks=c("Fewer than 4","4 or more"),"Status"=c("Cancer","Control"))
+Drinks
+
+chisq.test(Drinks)
+
+epitab(Drinks, method = "oddsratio")
+```
+Study Design: Case Control Study
+- This was an observational study that classified the subject based upon the outcome of the subjects response. 
+
+Test Report:
+- The test statistic is 0.1785 with a Pvalue of 0.672. At a significance level of 0.05, this observation study's sample does not provide statisically significant evidence to associate a difference of cancer diagnosis based on alcohol consumption. 
+
+CI Report:
+The odd of being diagnosed with Breast cancer while drinking is 0.94 times likely than when a person consumes more than 4 drinks a week.At 95% confidence, the interval ranges from 0.76 and 1.176672. Since 1 is within the range, there is not enough evidence to assume that drinking more than 4 times a week has a difference in Breast Cancer Diagnosis. 
+

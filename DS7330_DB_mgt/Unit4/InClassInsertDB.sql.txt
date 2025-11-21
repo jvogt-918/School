@@ -1,0 +1,43 @@
+use InClassDB;
+
+INSERT INTO Employees (EmpID, Name, DepartmentID, ManagerID, Salary) VALUES
+(1, 'Alice', 101, NULL, 100000),
+(2, 'Bob', 102, 1, 85000),
+(3, 'Charlie', 101, 1, 90000),
+(4, 'Diana', 103, 2, 75000),
+(5, 'Eve', 102, 3, 78000);
+
+INSERT INTO Departments (DeptID, DeptName) VALUES
+(101, 'Sales'),
+(102, 'Engineering'),
+(103, 'HR');
+
+
+INSERT INTO Customers (CustomerID, Name, City) VALUES
+(1, 'John Smith', 'New York'),
+(2, 'Jane Doe', 'Chicago'),
+(3, 'Sam Johnson', 'Seattle'),
+(4, 'Jeff Mitchell', 'Dallas');
+
+
+INSERT INTO Products (ProductID, ProductName, Price) VALUES
+(2001, 'Laptop', 1200),
+(2002, 'Smartphone', 800),
+(2003, 'Tablet', 500);
+
+
+
+INSERT INTO Orders (OrderID, CustomerID, ProductID, OrderDate, Amount) VALUES
+(1001, 1, 2001, '2023-09-01', 1200),
+(1002, 2, 2002, '2023-09-05', 1600),
+(1003, 1, 2003, '2023-09-07', 1500),
+(1004, 3, 2002, '2023-09-10', 800),
+(1005, NULL, 2002, '2023-10-11', 900);
+
+
+INSERT INTO OrderDetails (OrderDetailID, OrderID, ProductID, Quantity) VALUES
+(3001, 1001, 2001, 1),
+(3002, 1002, 2002, 2),
+(3003, 1003, 2003, 3),
+(3004, 1004, 2002, 1);
+

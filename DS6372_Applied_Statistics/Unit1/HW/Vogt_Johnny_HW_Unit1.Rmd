@@ -1,0 +1,155 @@
+---
+title: "Unit 1 HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1: Air Pollution Study
+Researchers wish to assess whether air pollution has a negative impact on well populated cities by investigating the cities mortality rates (per 100,000). It is generally accepted that mortality rates depend on a a number of factors including socioeconomic and environmental variables. 
+
+To assess whether air pollution has an effect on the mortality rate, we wish to determine whether measurements of pollutants such as nitrogen oxides and sulfur dioxide have an effect after accounting for well-known factors.  The following code chunk loads in the data set and provides an overall summary graph.  Precipitation is mean rainfall in inches.  Education is median number of school years completed among adults and nonwhite is the percentage of the cities population that is nonwhite.
+
+```{r}
+library(Sleuth3)
+library(GGally)
+air<-ex1123
+head(air)
+ggpairs(air[,c(3:7,2)])
+
+```
+
+A.  Using the graph, provide commentary on what trends you see with the predictors and the mortality rate. Do any of them look nonlinear?  
+
+When comparing the mortality rate with the other variables, the mortality rate has a fairly significant correalation with most predictors that would warrant an investigation. Although "NOX's" relationship with the Mortality rate does not seem to have neither a positve or negative relationship. 
+
+B.  Fit a regression model using all five predictors.  Provide the residual diagnostics and comment on whether the assumptions look reasonable.
+
+Through the residuals diagnostics, nearly all the assumptions seem to have been met. It should be noted that on the Residual v. Leverage plot, there is a single point far to the right that hold a "high" amount of leverage and should be investigated. The other plots are fairly reasonable, any minor transgressions to the assumptions are not egregious enough to warrant significant worry.The QQ Plot, shows slight deviation from a normal distribution and the other two plots do not show any discernable pattern to be of note. 
+
+```{r}
+Pred5_Mort_air <- lm(Mort~Precip+Educ+NonWhite+NOX+SO2, data=air)
+summary(Pred5_Mort_air)
+par(mfrow = c(2, 2))
+plot(Pred5_Mort_air)
+
+```
+C.  Use the `vif` function within the **car** package to examine the VIFs.  Are there any concerns for this particular study's goals and research question?  What if there were really high VIFs among Education, Nonwhite, and Precip?  Would that change your answer?
+
+The VIF values for each predictor appears to have low multicollinearity, each of them appearing to be indenpendent form each other. If the VIFs were high among the three Education, NonWhite, and Precip, that would be a cause for concern. We would start to look for any redundancy in each predictors to see if we could remove them from the model. 
+
+```{r}
+library(car)
+vif(Pred5_Mort_air)
+```
+
+D.  Assuming the assumptions of this model are reasonable, what can generally be said about the association of the pollution variables with mortality? Directly interpret the regression coefficient
+
+Assuming a alpha value of .05, three of the predictors have an estimate far enough from the intercept that it can be considered to have a statiscally significant effect to the intercept of the model. Nox and Precipation does does not have an estimate significant enough to safely assume that it doesnt have a neglible effect to the intercept. Precipitation(Not Confident), NonWhite(Categorical), and S02 have an additive affect to the intercept. Education and NOX (Not Confident) have a subtractive effect to the intercept.
+
+```{r}
+summary(Pred5_Mort_air)
+```
+
+E.  The interested student might wonder whether a potentially better fit to the data set may be modeling NOX and SO2 on the log scale.  The graphs below highlight the basic differences.  Update your previous model and comment on whether the general conclusion would change or not.  Directly interpret the regression coefficient on the $SO_2$ variable now.
+
+After transforming the NOX and SO2 Variable to their natural logarithm, the general conclusion would change slightly, precipitation's affect to the intercept is now considered statistically significant now that the model uses the log of NOX and SO2. Using the natural logarithm for the SO2, we've transitioned towards interpreting the value through a log-linear model. Holding all the other predictors, a 1% increase to the median value of the S02, is associated with a 0.11 affect to the Mortality Rate. 
+
+```{r, echo=F}
+mymodel<-lm(Mort~Precip+Educ+NonWhite+log(NOX)+log(SO2),data=air)
+par(mfrow=c(2,2))
+plot(Mort~SO2,data=air)
+plot(Mort~log(SO2),data=air)
+plot(Mort~NOX,data=air)
+plot(Mort~log(NOX),data=air)
+par(mfrow=c(1,1))
+
+summary(mymodel)
+
+```
+
+## Exercise 2: Predicting Fish Weights
+This will be a quick exercise in writing a contrast. The fish data set includes weight, height, width, and 3 length measurements for seven different species of fish.  
+
+A quick exploration between the relationships between log(weight) and Length1 for the different species suggests that they potentially have different slopes.  
+
+```{r}
+setwd("C:/Users/Owner/git/School/DS6372_Applied_Statistics/")
+fish<-read.csv("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit1/HW/Fish.csv",header=T)
+summary(fish)
+library(ggplot2)
+ggplot(fish,aes(x=Length1,y=log(Weight),color=Species))+geom_point()+geom_smooth(method="lm")
+```
+
+A. Fit a model so that individual intercepts and slopes are fitted for each species.  Use the contrast framework to estimate the slope for the Smelt species. Provide a formal interpretation of this slope and include a 95 percent confidence interval. You do not need to provide a formal interpretation of the interval, just the slope value (point estimate). 
+
+The slope for the Smelt Species is calculated to be at .26 and the 95% Confidence Interval is 0.1663402 and 0.3606915. Holding the other predictors constant and the fish being Smelt, for every 1 unit of increase to Length1, the increase to the log(median) weight of the fish will fall between 0.17 and 0.36. At a 95% confidence interval, the slope will fall between 0.17 and 0.36
+
+
+```{r}
+fishmod <- lm(log(Weight) ~ Length1 * Species, data = fish)
+summary(fishmod)
+
+#Contrast maker
+lm.contrast<-function(lmobj,contrast){
+  if(is.matrix(contrast)==F) contrast<-matrix(contrast,nrow=1)
+  if(ncol(contrast)!=length(coef(lmobj))) return("Error: Contrast length does not match the number of coefficients in linear model object.")
+  estimates<-contrast %*% coef(lmobj)
+  se<- sqrt(diag(contrast %*% vcov(lmobj) %*% t(contrast)))
+  t.stat<-estimates/se
+  p.val<-pt(-abs(t.stat),df=lmobj$df.residual)
+  ci.l<-estimates-qt(.975,df=lmobj$df.residual)*se
+  ci.u<-estimates+qt(.975,df=lmobj$df.residual)*se
+  results<-data.frame(Estimates=estimates,SE=se,t.stat,p.val,Lower=ci.l,Upper=ci.u)
+  return(results)
+}
+
+names(coef(fishmod))
+contrast.smelt <-c(0,1,0,0,0,0,0,1)
+lm.contrast(fishmod,contrast.smelt)
+```
+
+B. (Stretch question)  Suppose I wanted to formally test if the slope for the pike species is different from the slope of the smelt.  What contrast could we construct to formally test this?  Hint: Determine the beta's that are involved in each one of the individuals slopes and subtract one from the other.
+The contrast would be be (0,1,0,0,0,1,0,-1)
+```{r}
+names(coef(fishmod))
+contrast.pike <- c(0,1,0,0,0,1,0,-1)
+lm.contrast(fishmod,contrast.pike)
+```
+
+## Exercise 3
+The following code simulates a data set that follows a trend that is a 4th degree polynomial.  Below is a plot of the data along with residual plots from regression model. 
+```{r}
+set.seed(1234)
+x<-runif(100,-6,6.5)
+trend<- 2*x^4-2*x^3-50*x^2+100*x+2
+y<-trend+rnorm(100,0,100)
+mymodel<-lm(y~poly(x,2))
+
+par(mfrow=c(1,3))
+plot(x,y)
+plot(mymodel$fitted.values,mymodel$residuals,ylab="Residuals",xlab="Fitted")
+plot(x,mymodel$residuals,ylab="Resdiduals")
+par(mfrow=c(1,1))
+```
+
+
+A. Using the graphics, explain to a layman why the current model being fitted is not a good fit to the data set. 
+
+Observing the graphics, you could plainly see from the first plot that the relationship between X and Y has a rough "U" Shape to it. The next two plots help us observe the residuals of our model. The residual are the difference/distance between each observed point from the predicted point. If our model was a good fit, there would be no discernable pattern to the 2nd and 3rd plots. Instead we are able to see clear shpaes and patterns in them. 
+
+B. To help the laymen better understand, repeat the graphics using different polynomial fits to illustrate what a better model fit would look.
+We should change the polynomial in the lm function to 4, that would match the trend that we had set earlier. 
+
+```{r}
+mymodeltothe4 <- lm(y ~ poly(x,4))
+par(mfrow=c(1,3))
+plot(x,y)
+plot(mymodeltothe4$fitted.values,mymodeltothe4$residuals,ylab="Residuals",xlab="Fitted")
+plot(x,mymodeltothe4$residuals,ylab="Resdiduals")
+par(mfrow=c(1,1))
+```

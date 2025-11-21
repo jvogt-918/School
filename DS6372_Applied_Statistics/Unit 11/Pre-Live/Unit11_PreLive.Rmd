@@ -1,0 +1,137 @@
+---
+title: "Unit 11 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1:  Continous Predictor Case
+As discussed in the videos, visualizing trends when the predictor is continuous and the response is binary takes a little care.  Loess curves are one way to examine it but the results will vary depending on the data set and sample size.  We will illustrate this using two separate data sets.  The first is the credit card default set from the videos and the second takes a look at an experiment evaluating the failure of O-rings during test launches before the Challenger launch, which catastrophically failed due to an O-ring failure.
+
+There are two main steps to visualize using loess curves.  The first is setting up your response variable as numeric and the second is to just plot the points with a loess curve overlayed.  When creating your numeric response variable, it should be coded so the primary event is a 1 so that it makes sense with other output you create.
+
+The ISLR `Default` data set actually has multiple predictors but we will just examine the balance predictor which is continuous. Note how the response is not numeric,so we will add an additional columm.  Our interest is when they default so the level "yes" will take the numeric value 1.
+```{r}
+library(ISLR)
+table(Default$default)
+Default$default.num<-ifelse(Default$default=="Yes",1,0)
+#Sanity check
+table(Default$default.num,Default$default)
+```
+
+Once the response is numeric a simple call can be made using ggplot2
+```{r}
+library(ggplot2)
+ggplot(Default,(aes(x=balance,y=default.num)))+geom_point()+geom_smooth(method="loess",span=.4)
+```
+
+A.  Just note that the loess fit comes with some options to modify the fit.  The point here is to not get anything exact.  We just want to see the trend.  Change the `span` option to 0.1 and observe the difference. Although they are different, they both suggest as the balance on the credit card account increases, the chance of the customer defaulting on their credit card increases.
+
+```{r Change Span to 0.1}
+library(ggplot2)
+ggplot(Default,(aes(x=balance,y=default.num)))+geom_point()+geom_smooth(method="loess",span=.1)
+```
+
+B.  Rinse and repeat this strategy using the `Challenger` data set from the **Sleuth3** package to examine the relationship between when an O-ring failure occurred and temperature of the launch.  Make note of the difficulties with this much smaller data set when it comes to fitting a loess plot (use default setting) and then specify the span=1.  What does this plot suggest when it comes to the relationship?
+```{r}
+library(Sleuth3)
+
+head(ex2011)
+
+ex2011$FailureNum <- ifelse(ex2011$Failure == "Yes", 1, 0)
+
+ggplot(ex2011, aes(x = Temperature, y = FailureNum)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  ggtitle("O-ring Failure vs Temperature (default span)")
+
+ggplot(ex2011, aes(x = Temperature, y = FailureNum)) +
+  geom_point() +
+  geom_smooth(method = "loess", span = 1) +
+  ggtitle("O-ring Failure vs Temperature (span = 1)")
+```
+Having a small data set makes it difficult to fit a loess plot, since there isnt enough data point to create a smooth line. Each data point that isnt the trend tends to have a strong effect on the loess plot. Which is why we would use a larger span in order to smooth out the line. 
+
+C.  The following code fits a logistic regression model to the `Challenger` data set.  Interpret the regression coefficient in terms of an odds ratio.  Does this make sense given your previous graph?
+```{r}
+mydata<-ex2011
+log.model<-glm(Failure~Temperature,data=mydata,family="binomial")
+coef(summary(log.model))
+```
+Yes it does make sense, as the temperature decrease, the risk of O-Righ failure rises by 16%
+
+
+D.  Before fitting logistic models for hypothesis testing, it is important to pay attention to the order in which the levels of your response are behaving.  It is the last level that glm treats as the event (positive class) of interest.  Note the following example:
+```{r}
+mydata$newFail<-factor(ifelse(mydata$Failure=="Yes","Failed","Survived"))
+#View(mydata)
+levels(mydata$newFail)
+levels(mydata$Failure)
+newlog.model<-glm(newFail~Temperature,data=mydata,family="binomial")
+coef(summary(newlog.model))
+```
+What is the interpretation of this coefficient for temperature in the model?   Note the p-values and SE's are the same. It is only the coefficients that have changed. 
+
+Its the opposite, the data didnt change, but the interpretation is the opposite. For every 1 degree of increase to the temperature, the odds of failure reduce about 16%. 
+
+## Discussion 2:  Categorical Predictors
+
+Dr. Turner showed in the videos that when you have a categorical predictor for two levels the logistic regression models produce essentially the same analysis as a Chi square test and odds ratio from a 2x2 table.  When you have more than two levels, the interpretation approach is similar to a one way ANOVA.
+
+Consider the following coronary artery disease data set which tries to assess important risk factors such as age, sex, and echo cardiogram results on coronary artery disease.  Sex and age are self explanatory. The ECG variable stands for echo cardiogram. Although the variable is categorical, Low stands for Normal, Medium stands for Mild, and High stands for Severe in terms of the echo cardiogram's general reading.  
+
+```{r}
+setwd("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit 11/Pre-Live/")
+cad<-read.csv("coronary.csv",stringsAsFactors = T)
+head(cad)
+```
+
+A.  To explore categorical variables we typically make use of barplots.  Below are bar plots examining the relationship of sex and ECG on disease status.  Describe what trends you see with the predictors and their potential impact on having coronary artery disease.
+
+```{r, echo=F}
+library(dplyr)
+g2<-cad %>% 
+  group_by(ECG,CAD) %>%
+  summarise(cnt=n()) %>%
+  mutate(perc=round(cnt/sum(cnt),4))%>%
+  arrange(desc(perc))
+g2
+
+ggplot(g2[c(1,3,5),],aes(x=reorder(ECG,-perc),y=perc,colour=ECG))+
+  geom_bar(aes(fill=ECG),show.legend=T,stat="identity")+
+  ylab("Proportion of Disease ")+
+  xlab("ECG")
+
+
+g3<-cad %>% 
+  group_by(Sex,CAD) %>%
+  summarise(cnt=n()) %>%
+  mutate(perc=round(cnt/sum(cnt),4))
+g3
+
+ggplot(g3[c(2,4),],aes(x=reorder(Sex,-perc),y=perc,colour=Sex))+
+  geom_bar(aes(fill=Sex),show.legend=T,stat="identity")+
+  ylab("Proportion of Disease ")+
+  xlab("Sex")
+
+
+```
+The proportion of diseases increase with the ECG. The higher ECG classification is associated with higher proportion of disease. Gender-Wise, men are associated with a higher proportion of corornary disease. 
+
+B.  Below is a logistic regression model using ECG alone.  Interpret the regression coefficients as odds ratios for this given setting.  Remember, if the odds ratios are less than 1, you can always take the reciprocal and interpret it the other way around.  Do your best and lets see what you come up with.
+
+```{r , echo=F}
+log.model<-glm(CAD~ECG,data=cad,family="binomial")
+coef(summary(log.model))
+```
+
+The model uses the high ECG classification as the reference. The odds of CAD for people with Low ECG readings are about 83% lower than those with High ECG readings, obtaining a p-value of 0.2, which would be statistically significant enough to suggest a difference from the High ECG readings.  As for those with a Medium ECG reading, the odds are roughly 56% lower compare to the the High ECG readings, obtaining a p-value = 0.27, it is not statistically significant enough to suggest a difference from the high ECG reading group. . 
+
+C.  There is no work for this problem, but it's an important piece of information. The focus of discussion is interpreting the coefficients which is the most important thing.  To get CIs for odds ratios (regardless of whether they are numeric or continuous), you can run the following code on a glm object to obtain it.
+```{r}
+exp(confint(log.model))
+```
+

@@ -1,0 +1,90 @@
+---
+title: "Unit 10 Prelive"
+author: "Johnny Vogt"
+date: '2025/10/25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prelive Data Set #1
+In a 1962 social experiment, 123 three to four-year-old children from poverty level families in Ypsilanti, Michigan were randomly assigned either to a treatment group receiving 2 years of preschool instruction or to a control group receiving no preschool.  The participants were followed into their adult years.  The following table shows how many in each group were arrested for some crime by the time they were 19 years old.
+
+```{r cars}
+Data<-matrix(c(19,42,32,30),2,2,byrow=T)
+dimnames(Data)<-list(Exposure=c("Pre","Control"),"Arrested"=c("Yes","No"))
+Data
+
+```
+
+__QUESTIONS__
+
+1. Determine if the study is a prospective, retrospective, or observation design.  Why is this important?
+
+Yes, this is a prospective design. the determination of the type of study is important because it helps us (audience) how to judge the findings. Prospective studies do have strong evidence, but the question of ethics come into play with a study like this. 
+
+2. Consider the following R script that performs fishers exact test and a relative risk CI.  Determine how the relative risk (risk ratio) is calculated and interpret it as is.
+```{r}
+library(epitools)
+epitab(Data,method="riskratio",riskratio="boot",pvalue="fisher.exact")
+```
+The RR is calculated at 0.70.  and is calculated by dividing Control P1 by Pre P1. Which is the ratio of not being arrested while not attending preschool over having preschool. It can also be interpreted by the children int he control group have a 70% risk of being arrested by the age of 19 compared to the childredn who recieved preschool. The risk of arrest is 30% lower in the control group than the preschool goruip. 
+
+3.  Produce a hand calculation of the relative risk that allows you to say that "the chances of getting arrested for the control group are RR times higher than that of the children who went to the preschool".
+
+19/61 = 0.31147541
+32/62 = 0.516129032
+RR = 0.516/0.311 = 1.657045839
+
+The chances of getting arrested for the control group are 1.66 times higher than that of the children who went to the preschool
+
+4.  Use the "rev" option to change the row and columns so that the relative risk in the table matches your hand calculation in the previous question.
+
+```{r}
+epitab(Data, method = "riskratio", riskratio = "boot", pvalue = "fisher.exact", rev = "rows")
+
+```
+
+5.  Using your "rev" setting option from question 4, change the method to odds ratio, performing a fishers.exact test and a fisher confidence interval. Use the help page (?epitab) for the options to get that done.  Interpret the confidence interval for the odds ratio.
+
+Odd Ratio = 2.341066
+The odds of being arrested for preschool compared to the control is 2.34. At a 95% confidence level, the true odds ration of being arrested for children who attended preshcool are between 1.06 and 5.27. Since 1 doesnt fall in the interval and the pvalue = 0.028, we are able to say that 95% confident that the results are statistically significant enough to be claim that attending preschool  had significantly higher odds of being arrested by age of 19. 
+
+```{r}
+epitab(Data, 
+       method = "oddsratio",
+       oddsratio = "fisher",
+       pvalue = "fisher.exact",
+       rev = "rows")        
+```
+
+6.  As mentioned, Chi-square and Wald procedures are meant for large sample sizes.  When sample sizes are low, Fishers test and small sample confidence intervals such as bootstrap, fisher, or sample size adjsusted Wald intervals should be used.  Below are the codes of analyzing the data set assuming small sample sizes versus large sample size. Note how the limits and p-values are quite similar though not exactly the same 
+```{r}
+epitab(Data,method="riskratio",riskratio="boot",pvalue="fisher.exact")
+epitab(Data,method="riskratio",riskratio="wald",pvalue="chi2")
+```
+
+Run the same two lines of code again but with the following two data sets.  Compare the agreement or disagreement between the small sample size p-values and confidence intervals versus the large sample size p-value and confidence intervals.  Summarize your findings.
+
+The most obvious finding is that on the smaller sample, the intervals are much larger and conservative. That is because its trying to capture the uncertainty. While the larger sample sizes have smaller interval. Another finding is the warnings that "chi-sqaured approximation may be incorrect." that is because the smaller smaples do not meet the assumptions (Central Limit Theorem) for the chi-square approach. The ratios are identical. 
+
+```{r,echo=F}
+Data2<-matrix(c(1900,4200,3200,3000),2,2,byrow=T)
+dimnames(Data2)<-list(Exposure=c("Pre","Control"),"Arrested"=c("Yes","No"))
+Data2
+
+epitab(Data2,method="riskratio",riskratio="boot",pvalue="fisher.exact")
+epitab(Data2,method="riskratio",riskratio="wald",pvalue="chi2")
+
+Data3<-matrix(c(1,4,3,3),2,2,byrow=T)
+dimnames(Data3)<-list(Exposure=c("Pre","Control"),"Arrested"=c("Yes","No"))
+Data3
+
+epitab(Data3,method="riskratio",riskratio="boot",pvalue="fisher.exact")
+epitab(Data3,method="riskratio",riskratio="wald",pvalue="chi2")
+```
+
+
+

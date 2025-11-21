@@ -1,0 +1,335 @@
+---
+title: "Project 2: Adult Income Classification"
+author: "Mike Flores and Johnny Vogt"
+date: "2025-11-20"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+
+library(tidyverse)
+library(caret)
+library(MASS)
+library(class)
+library(randomForest)
+library(pROC)
+library(broom)
+library(knitr)
+library(kableExtra)
+set.seed(1234)
+```
+
+# 1. Introduction
+
+This project applies classification methods to the **Adult Income dataset**, a census-based dataset containing approximately 32,000 observations and 14 predictors, with the binary outcome:
+
+- **">50K"**
+- **"<=50K"**
+
+The analysis is divided into two major objectives:
+
+**Objective 1:**  
+Create a *clean and interpretable* logistic regression model, chosen using AIC, and interpret at least one continuous and one categorical coefficient.
+
+**Objective 2:**  
+Build *competing classification models* including:
+
+- Complex logistic regression (interactions or polynomials)
+- LDA
+- QDA
+- kNN
+- Random Forest
+
+Performance is compared using:
+
+- Sensitivity  
+- Specificity  
+- PPV  
+- NPV  
+- Prevalence  
+- ROC  
+- AUC  
+
+Validation data is used for all final comparisons.
+
+# 2. Data Loading & Cleaning
+
+```{r load-clean}
+adult <- read_csv("adult_income.csv",
+                  na = c("?", " ?"))
+
+adult <- adult %>%
+  mutate(
+    income = factor(income),
+    sex    = factor(sex),
+    workclass = factor(workclass),
+    education = factor(education),
+    marital_status = factor(marital_status),
+    occupation = factor(occupation),
+    relationship = factor(relationship),
+    race = factor(race),
+    native_country = factor(native_country)
+  ) %>%
+  drop_na()
+
+glimpse(adult)
+```
+
+# 3. Train/Validation Split
+
+```{r split}
+train_idx <- createDataPartition(adult$income, p = 0.7, list = FALSE)
+train <- adult[train_idx, ]
+valid <- adult[-train_idx, ]
+
+nrow(train); nrow(valid)
+
+train %>%
+  count(income) %>%
+  mutate(prop = n/sum(n))
+```
+
+# 4. Exploratory Data Analysis (EDA)
+
+## 4.1 Distribution of Numeric Predictors
+
+```{r eda-num1}
+train %>%
+  ggplot(aes(x = age, fill = income)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30)
+```
+
+```{r eda-num2}
+train %>%
+  ggplot(aes(x = hours_per_week, fill = income)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30)
+```
+
+## 4.2 Categorical Predictors
+
+```{r eda-cat}
+train %>%
+  count(education, income) %>%
+  group_by(education) %>%
+  mutate(prop = n/sum(n)) %>%
+  ggplot(aes(x = fct_reorder(education, prop), y = prop, fill = income)) +
+  geom_col(position = "fill") +
+  coord_flip()
+```
+
+# 5. Objective 1: Interpretable Logistic Regression
+
+```{r logit1}
+logit1 <- glm(
+  income ~ age + education + marital_status + occupation +
+           relationship + sex + hours_per_week +
+           capital_gain + capital_loss,
+  data = train,
+  family = binomial
+)
+
+summary(logit1)
+AIC(logit1)
+
+logit1_or <- tidy(logit1, conf.int = TRUE, exponentiate = TRUE)
+kable(logit1_or) %>% kable_styling()
+```
+
+## 5.1 Interpretation
+
+*(Write your interpretation here after knitting.)*
+
+# 6. Objective 1: Validation Metrics
+
+```{r metrics-helpers}
+metrics_from_cm <- function(cm, positive) {
+  tp <- cm[positive, positive]
+  fn <- sum(cm[, positive]) - tp
+  fp <- sum(cm[positive, ]) - tp
+  tn <- sum(cm) - tp - fn - fp
+  
+  tibble(
+    Sensitivity = tp / (tp + fn),
+    Specificity = tn / (tn + fp),
+    PPV = tp / (tp + fp),
+    NPV = tn / (tn + fn),
+    Prevalence = (tp + fn) / sum(cm)
+  )
+}
+```
+
+```{r logit1-pred}
+valid$prob_logit1 <- predict(logit1, newdata = valid, type = "response")
+valid$pred_logit1 <- ifelse(valid$prob_logit1 >= 0.5, ">50K", "<=50K") %>%
+  factor(levels = levels(valid$income))
+
+cm1 <- table(Predicted = valid$pred_logit1, Actual = valid$income)
+met1 <- metrics_from_cm(cm1, positive = ">50K")
+
+kable(cm1)
+met1
+
+roc1 <- roc(valid$income, valid$prob_logit1)
+auc(roc1)
+
+plot(roc1, main = "ROC: Logistic Regression (Objective 1)")
+```
+
+# 7. Objective 2: Complex Logistic Regression
+
+```{r logit2}
+logit2 <- glm(
+  income ~ age + I(age^2) +
+           education + marital_status +
+           occupation + relationship +
+           sex * hours_per_week +
+           capital_gain + capital_loss,
+  data = train,
+  family = binomial
+)
+
+AIC(logit1, logit2)
+```
+
+```{r logit2-pred}
+valid$prob_logit2 <- predict(logit2, newdata = valid, type = "response")
+valid$pred_logit2 <- ifelse(valid$prob_logit2 >= 0.5, ">50K", "<=50K") %>%
+  factor(levels = levels(valid$income))
+
+cm2 <- table(Predicted = valid$pred_logit2, Actual = valid$income)
+met2 <- metrics_from_cm(cm2, positive = ">50K")
+
+kable(cm2)
+met2
+
+roc2 <- roc(valid$income, valid$prob_logit2)
+auc(roc2)
+```
+
+# 8. Threshold Selection
+
+```{r threshold}
+coords2 <- coords(roc2, x = "best", best.method = "youden",
+                  ret = c("threshold","sensitivity","specificity"))
+coords2
+
+best_thresh <- coords2["threshold"]
+
+valid$pred_logit2_best <- ifelse(valid$prob_logit2 >= best_thresh,
+                                 ">50K", "<=50K") %>%
+  factor(levels = levels(valid$income))
+
+cm2b <- table(Predicted = valid$pred_logit2_best, Actual = valid$income)
+met2b <- metrics_from_cm(cm2b, positive = ">50K")
+met2b
+```
+
+# 9. LDA and QDA
+
+```{r lda-qda}
+dmy <- dummyVars(income ~ ., data = train)
+train_x <- predict(dmy, newdata = train) %>% as.data.frame()
+train_y <- train$income
+
+valid_x <- predict(dmy, newdata = valid) %>% as.data.frame()
+valid_y <- valid$income
+
+lda_fit <- lda(train_x, grouping = train_y)
+lda_prob <- predict(lda_fit, valid_x)$posterior[, ">50K"]
+lda_pred <- ifelse(lda_prob >= 0.5, ">50K", "<=50K") %>% factor(levels = levels(valid_y))
+
+cm_lda <- table(Predicted = lda_pred, Actual = valid_y)
+met_lda <- metrics_from_cm(cm_lda, positive = ">50K")
+roc_lda <- roc(valid_y, lda_prob)
+auc(roc_lda)
+
+qda_fit <- qda(train_x, grouping = train_y)
+qda_prob <- predict(qda_fit, valid_x)$posterior[, ">50K"]
+qda_pred <- ifelse(qda_prob >= 0.5, ">50K", "<=50K") %>% factor(levels = levels(valid_y))
+
+cm_qda <- table(Predicted = qda_pred, Actual = valid_y)
+met_qda <- metrics_from_cm(cm_qda, positive = ">50K")
+roc_qda <- roc(valid_y, qda_prob)
+auc(roc_qda)
+```
+
+# 10. kNN Model
+
+```{r knn}
+preproc <- preProcess(train_x, method = c("center","scale"))
+train_x_sc <- predict(preproc, train_x)
+valid_x_sc <- predict(preproc, valid_x)
+
+knn_pred <- knn(train_x_sc, valid_x_sc, cl = train_y, k = 15)
+
+cm_knn <- table(Predicted = knn_pred, Actual = valid_y)
+met_knn <- metrics_from_cm(cm_knn, positive = ">50K")
+met_knn
+```
+
+# 11. Random Forest (Nonparametric)
+
+```{r rf}
+set.seed(1234)
+rf_fit <- randomForest(
+  x = train_x,
+  y = train_y,
+  ntree = 300,
+  mtry = floor(sqrt(ncol(train_x))),
+  importance = TRUE
+)
+
+rf_prob <- predict(rf_fit, valid_x, type = "prob")[, ">50K"]
+rf_pred <- ifelse(rf_prob >= 0.5, ">50K", "<=50K") %>% factor(levels = levels(valid_y))
+
+cm_rf <- table(Predicted = rf_pred, Actual = valid_y)
+met_rf <- metrics_from_cm(cm_rf, positive = ">50K")
+
+roc_rf <- roc(valid_y, rf_prob)
+auc(roc_rf)
+```
+
+# 12. ROC Comparison
+
+```{r roc-compare}
+plot(roc1, col="black", main = "ROC Comparison")
+plot(roc2, col="blue", add=TRUE)
+plot(roc_lda, col="red", add=TRUE)
+plot(roc_qda, col="green", add=TRUE)
+plot(roc_rf, col="purple", add=TRUE)
+
+legend("bottomright",
+       legend = c("Logit1","Logit2","LDA","QDA","RF"),
+       col = c("black","blue","red","green","purple"),
+       lwd = 2)
+```
+
+# 13. Comparison Table
+
+```{r compare-table}
+results <- bind_rows(
+  tibble(Model = "Logit1", met1),
+  tibble(Model = "Logit2", met2),
+  tibble(Model = "Logit2_best", met2b),
+  tibble(Model = "LDA", met_lda),
+  tibble(Model = "QDA", met_qda),
+  tibble(Model = "kNN_15", met_knn),
+  tibble(Model = "RandomForest", met_rf)
+)
+
+kable(results) %>% kable_styling(full_width = FALSE)
+```
+
+# 14. Conclusions
+
+Write your conclusions here.
+

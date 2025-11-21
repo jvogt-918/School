@@ -1,0 +1,44 @@
+---
+title: "Unit 4 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1: Report Reviews
+Dr. Turner will provide two or three reports of multiple linear regression projects made by previous students.  Using the information about planning an analysis and report, provide some criticism on what you think the authors could have done better and what aspects of their report that they did very well.  This can be a combination of technical details on the modeling front as well as just how they chose to communicate and present the information to you.
+
+During our live session we will break out into groups to discuss and then come together and share general themes.
+
+Johnny:
+Data Context slide was very Messy, not well organized. Going over concerns and how they handled assumptions and missing data. Data seems old. China...South Korea.. Russia being called Developing... Spent alot of time on World Maps, couldve put a side by side with the life expectancy map to better highlight the relationship. How did they run forward, backward and stepwise.. those are the three types of feature selection? Variance is more common???? At the expense of interpretation... it just changes it, makes it sound lazy rather than less than. Are the graphs showing logged values, oh I see now. LOL. Started criticizing too early and got lost in the presentation. Getting confused on on what exactly are looking at between all the model  when looking at the assumptions. Feature Selection = AI???Why is this in percentage of what is mising or not. Why are we looking at the assumption plots over and over, its like they made a model by using only feature selection, but that shouldve been part of each process, I would think. Did they ever really tell us what each objective was?? OH yea, if there was time as a variable, what time did they hold the data as constant? 
+
+Mike
+No audience really defined for them. 
+alot of what we did and reason why did it. didnt explain the results
+unneccesry infomation
+did go over what they predicted?
+poor translation to business terms
+
+Devin
+went well over data context
+leniency over time limit
+used alot of filler
+
+
+
+
+## Discussion 2: RMSE Determination 
+You are working on a project to build a regression model for prediction purposes.  The model should be good enough that the vast majority of future predictions will be off by no more than $\pm100$ units. Suppose that "vast majority" is defined to be 99.7 percent.  When fitting your models via 10-fold cross validation, what RMSE are you looking to see that you are within the project's specification?  Assume that prediction errors are normally distributed.
+
+In order to be able to ensure that your model would not be off by more than 100 units, you would need to have a RMSE of lower than 33.3. A model that has anything lower than 33.3, should have a vast majority of the predictions within 100 units. 
+
+
+## Discussion 3: Giving Advice
+A predictive modeler is not happy with his current multiple linear regression model’s prediction accuracy.  They currently are using six continuous predictors and two categorical predictors.  These are the only variables they currently have to work with and they are using them as is (the way they were recorded). All regression coefficients are both statistically and practically significant.  Given their current standing and the current information, provide a suggestion to help them possibly improve prediction accuracy.  What additional questions would you want to ask them?
+
+Using only the information provided, I would suggest to see if the model violates any assumption first and foremost. Afterwards, we would try see if we could create a polynomial relationship to some of the continous variables or any interactions with the data. If the model still doesnt seem to meet the modeler's satifaction, than we could start looking at using some feature selection or look deeper into the assumptions and see if we should start looking into using non parametric models. 
+

@@ -1,0 +1,111 @@
+---
+title: "Vogt_Johnny_Unit3HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1:  Conceptual Questions
+A.  Briefly explain what a bootstrap random sample is
+
+A bootstrap random sample is a process to use the sample set as a pool to sample from. The process would draw at random and with replacement from the sample till it reaches the same amount of observations as the original sample. The replacement helps the bootstrap sample be different than the original sample, allowing the same observation from the original sample be drawn again if chosen at random. 
+
+B.  What major problems does the method of bootstrap confidence intervals solve? This can be a general discussion or a specific discussion about regression.
+
+Since bootstrapping samples from the sample dataset, it doesn't require for assumptions to be met. Being able to repeatedly resample from the original dataset, it is able to create a distribution from the original dataset. 
+
+C.  Briefly explain what the key difference is between an ensemble prediction and a bagged prediction
+
+Bagged predicitons specifically uses bootstrapped samples to create a prediction. Multiple models are trained off of bootstrapped samples and their predictions are aggregated ((B)ootstrap (AG)greation) to create a averaged prediction that helps prevent overfitting from one bootstrapped sample. While an Ensemble covers a wider range of models, that would include bagging as well. Each model in an ensemble method are created to correct each others bias and errors. 
+
+## Exercise 1:  Estimating Percentiles
+Consider the following `diamond` data set, which has as one of its variables the price of the diamond.   
+```{r ,echo=F}
+library(ggplot2)
+set.seed(1234)
+price<-sample(diamonds$price,500)
+hist(price,xlab="Price",main="")
+```
+
+In many areas of study, the parameter of interest is not the mean or the median but a percentile.  For example, suppose a diamond expert is trying to get a handle on the market for high end diamonds and is interested in what the top 10 percent of diamonds are going for in price.  To do this you could calculate the 90th percentile:
+```{r}
+quantile(price,probs=.9)
+```
+This states that 90% of the diamonds cost less than $9,706.60.  Thus the top 10% of the most highly priced diamonds are above this number.  Unfortunately like any other statistic this is just an estimate of what the true 90th percentile for the entire population of diamonds actually is.  Perform a 95% bootstrap confidence interval for 90th percentile of diamond prices to reflect the uncertainty in this estimate.  Provide the classic statistical interpretation to the interval.
+
+
+After repeating the bootstrap sample over a 1000 times, the 95% Bootstrap CI for the 90th percentile is $8682.247 - $10641.200.If we were repeat this with more random samples, 95% of those samples would contain the true 90th percentile. 
+
+```{r}
+set.seed(1234)
+n_iter <- 1000
+boot_perc <- numeric(n_iter)
+for(i in 1:n_iter){
+  boot_sample <- sample(price, length(price), replace=TRUE)
+  boot_perc[i] <- quantile(boot_sample, probs=0.9)
+}
+ci <- quantile(boot_perc, probs=c(0.025, 0.975))
+ci
+summary(ci)
+```
+ 
+## Exercise 2: Regression
+During unit 2 pre-live session, we analyzed the golf data set using feature selection tools.  For that discussion, log transforming the response was helpful for dealing with constant variance and normality assumptions.  
+
+The following scatter plot, in particular the last row, provides an investigation of the trends with each predictor and Avg Winnings.  
+```{r}
+library(GGally)
+setwd("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit 3/hw/")
+golf<-read.csv("GolfData2.csv")
+
+#Getting fancy
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point(colour = "blue",size=.2) +
+    geom_smooth(method = loess, color = "red", ...)
+  p
+}
+
+
+ggpairs(golf[,c(2:7,11)],lower=list(continuous=lowerFn),progress = F)
+
+```
+
+A. Assuming the trends are roughly linear and constant variance is the only issue, fit a regression model using all six predictors using a bootstrap procedure.  Use the intervals to determine if all predictors are relevant.  Provide an interpretation of the coefficient on the greens variable.  The nice advantage here is that the transformation interpretations are not needed here.
+
+The green's coefficient bootstrap confidence interval ranges from $5713.99 - $ 12,762.54 associating the predictor with a positive effect towards average winnings. Holding the other predictor static, a single-point increase to the green predictor is associated with an increase between $5700 and $12,750 to the average winnings. 
+
+```{r}
+set.seed(1234)
+library(boot)
+
+# Define model formula
+formula <- AvgWinnings ~ AvgDrive + DriveAcc + Greens + AvgPutts + Save + Age
+
+# Bootstrap function
+boot_fn <- function(data, indices) {
+  d <- data[indices, ]
+  coef(lm(formula, data = d))
+}
+
+# Apply bootstrapping
+results <- boot(golf, statistic = boot_fn, R = 1000)
+boot.ci_fn <- function(coef_num) quantile(results$t[,coef_num], probs=c(.025,.975))
+cis <- sapply(1:7, boot.ci_fn) # including the intercept as column 1
+
+names(coef(lm(formula, data = golf)))
+cis # Each column is a predictor, rows are lower and upper bounds
+
+
+```
+
+B. The coefficient on AvgPutts is huge!! It almost seems unrealistic.  Try to explain why this interval estimate may still make sense.  Hint: Try to offer an interpretation that would relate to a more realistic setting rather than a one unit increase in AvgPutts.
+
+This shows how LARGE of an effect each point towards AvgPutts has on Average Winnings! Understanding the sport of golf helps interpret the number alot more. Since putting is done when the golf ball is on the green (near the hole), most putts do not take alot of attempts. As from the summary output of AvgPutt Attribute, it ranges from 1.7 - 1.9 shots. Measuring the effect of the predictor using a single unit (shot) as a measurement, the change in AvgWinnings would drastically change. An more appropriate interval would be using 0.1 rather than 1.0. 
+```{r}
+summary(golf$AvgPutts)
+```
