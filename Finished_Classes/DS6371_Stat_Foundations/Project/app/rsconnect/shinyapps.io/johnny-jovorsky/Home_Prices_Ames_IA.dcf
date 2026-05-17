@@ -1,0 +1,12 @@
+name: Home_Prices_Ames_IA
+title: Home_Prices_Ames_IA
+username: johnny-jovorsky
+account: johnny-jovorsky
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15156383
+bundleId: 10721600
+url: https://johnny-jovorsky.shinyapps.io/Home_Prices_Ames_IA/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

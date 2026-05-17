@@ -1,0 +1,144 @@
+---
+title: "Unit 6 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Disclaimer
+This pre-live session utilizes LaTex to write out mathematical equations and matrices.  When organizing your own work, you are not required to write mathematically in R markdown although you are welcome to try.  For any hand calculations you can simply write them on paper, take a quick picture with your phone and include it in the markdown file, additional PowerPoint slide, or Word document to submit. 
+
+## Discussion 1: Matrix Tricks
+During the videos, Dr. Turner showed that matrix operations can be used to calculate basic statistics of variables. For example, suppose we have data stored in a a vector $X$ with 5 numbers.  We can compute the average of the the data by computing $$C'X$$ where $C'=(1/5,1/5,1/5,1/5,1/5)$.
+```{r cars}
+#computing an average using matrices
+x<-c(1,2,3,4,5)
+c.vec<-c(1/5,1/5,1/5,1/5,1/5)
+
+mean(x)
+t(c.vec) %*% x
+```
+We also showed that you can stack different coefficients in a matrix to perform the computations simultaneously.  For example, the following $C$ matrix computes the average as well as the sum.$$C'=\begin{bmatrix}
+1/5&1/5&1/5&1/5&1/5 \\
+1&1&1&1&1 \\
+\end{bmatrix}$$
+In `R`, we compute the values by stacking the rows on top of each other,  `c.vec` for the averages and `c.vec1` for the sum, as follows:
+```{r}
+#Summing up the variables
+c.vec2<-c(1,1,1,1,1)
+sum(x)
+t(c.vec2) %*% x
+
+
+#Doing both calculations simultaneously
+c.mat<-rbind(c.vec,c.vec2)
+c.mat
+c.mat %*% x
+```
+
+We also discussed sums of squares.$$x'x=\begin{bmatrix}
+1&2&3&4&5 \\
+\end{bmatrix} \begin{bmatrix} 1 \\ 2 \\ 3 \\ 4\\ 5\\ \end{bmatrix}=
+1^2+2^2+3^2+4^2+5^2 
+$$.
+
+```{r}
+t(x) %*% x
+```
+
+A.  I want you to investigate what happens when we apply the same basic matrix multiplication as earlier but we have a data matrix with multiple variables.  Evaluate the following code and summarize what happens:
+```{r, echo=T ,results='hide'}
+c.mat
+dat<-matrix(c(1:5,6:10,11:15),5,3)
+dat
+result<-c.mat %*% dat
+result
+```
+
+
+
+B.  The following exercise illustrates how matrices can be used to compute the standard deviation of the data set.
+For each line of code, write out in words what matrix operations are we doing (adding,subtracting, multiplying) and what we essentially have stored (matrix with what inside??) in each step. Remember you can simply print each object in the console.
+```{r , results='hide'}
+step1<-mean(x)*c(1,1,1,1,1)
+step2<-x-step1
+step3<-t(step2) %*% step2
+step4<-step3/(5-1)
+step6<-sqrt(step4)
+
+#Verify
+sd(x)
+step6
+```
+
+C.  (Important) Compute the following matrix multiplication symbolically. Assuming the $X$s are data values in a data set, what does this multiplication effectively do? If you are struggling, run the following code as a hint to see what is going on:
+
+$$\begin{bmatrix}
+x_{11}&x_{21} \\
+x_{12}&x_{22} \\
+x_{13}&x_{23} \\
+\end{bmatrix}  
+\begin{bmatrix}
+1&1 \\
+1&-1 \\
+\end{bmatrix} $$.
+```{r , results='hide'}
+C<-matrix(c(1,1,1,-1),2,2)
+X<-matrix(c(1:5,6:10),5,2)
+X %*% C
+
+newX<-data.frame(X)
+names(newX)
+
+XC<-data.frame(V1=newX$X1+newX$X2,V2=newX$X1-newX$X2)
+XC
+
+```
+
+
+## Discusion 2: Multivariate Normal
+Suppose we have four random variables that are multivariate normal with covariance matrix 
+$$\Sigma=\begin{bmatrix}
+4&1&0&0 \\
+1&9&0&0 \\
+0&0&16&6 \\
+0&0&6&9 \\
+\end{bmatrix}  $$.
+
+A.  Which variable(s) are uncorrelated with each other?
+B.  What is the standard deviation of each variable?
+C.  What is the correlation between the first and the second variable? The third and the fourth?
+D.  If four variables are all uncorrelated and all have the same standard deviation of 5, what does their covariance matrix look like?
+
+
+
+## Discussion 3:  MLR Making Predictions
+This week's videos covered the fact that regression coefficients of an MLR model can be computed using the design matrix, which is constructed using the columns of the predictor variables and an extra column of ones for the intercept:  $$\hat{\beta}=(X'X)^{-1}X'Y$$
+
+A.  Suppose a fitted regression model involving 2 predictors yields the following model: $$y=3+5x_1+2x_2.$$
+Provide the predictions for the 3 new observations in the following data set: 
+
+$$X=\begin{bmatrix}
+2&1 \\
+5&-1 \\
+0&7 \\
+\end{bmatrix}$$. 
+
+Note that the first column of $X$ is $x_1$ and the seconnd column is $x_2$
+
+ 
+
+B.  The general regression model in matrix form looks like: $$Y=X\beta+\varepsilon$$
+
+Once we have our regression coefficients estimated from data, making predictions on future data is straight forward:
+$$\hat{Y}_{new}=X_{new}\hat{\beta}$$
+Compute the following matrix multiplication and compare this to your answers in part A.
+```{r}
+newX<-matrix(c(2,5,0,1,-1,7),3,2)
+newX<-model.matrix(~newX)
+beta.hats<-c(3,5,2)
+newX %*% beta.hats
+```
+

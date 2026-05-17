@@ -1,0 +1,97 @@
+---
+title: "Unit1 HW"
+author: "MSDS 6372: Jacob Turner"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## HW Instructions
+Students should create a separate R markdown file that includes the necessary code and graphics to answer each question.  The R markdown file should be submitted as well as a knitted version in either Word or HTML. Although the homeworks are designed to offer students a jumping off point when it comes to coding, students are expected to utilize the discussions and R examples used in the live sessions. 
+
+For problems that include making graphics or performing analysis, students should be sure to articulate their answers in writing unless explicitly told not to.  That is, if you provide a figure or table of results then it is expected that commentary will also be provided.
+
+
+## Exercise 1: Air Pollution Study
+Researchers wish to assess whether air pollution has a negative impact on well populated cities by investigating the cities mortality rates (per 100,000). It is generally accepted that mortality rates depend on a a number of factors including socioeconomic and environmental variables. 
+
+To assess whether air pollution has an effect on the mortality rate, we wish to determine whether measurements of pollutants such as nitrogen oxides and sulfur dioxide have an effect after accounting for well-known factors.  The following code chunk loads in the data set and provides an overall summary graph.  Precipitation is mean rainfall in inches.  Education is median number of school years completed among adults and nonwhite is the percentage of the cities population that is nonwhite.
+
+```{r}
+library(Sleuth3)
+library(GGally)
+air<-ex1123
+head(air)
+ggpairs(air[,c(3:7,2)])
+
+```
+
+A.  Using the graph, provide commentary on what trends you see with the predictors and the mortality rate. Do any of them look nonlinear?  
+
+B.  Fit a regression model using all five predictors.  Provide the residual diagnostics and comment on whether the assumptions look reasonable.
+
+C.  Use the `vif` function within the **car** package to examine the VIFs.  Are there any concerns for this particular study's goals and research question?  What if there were really high VIFs among Education, Nonwhite, and NOX?  Would that change your answer?
+
+D.  Assuming the assumptions of this model are reasonable, what can generally be said about the association of the pollution variables with mortality? Directly interpret the regression coefficient
+
+D.  The interested student might wonder wether a potentially better fit to the data set may be modeling NOX and SO2 on the log scale.  The graphs below highlight the basic differences.  Update your previous model and comment on whether the general conclusion would change or not.  Directly interpret the regression coefficient on the $SO_2$ variable now.
+```{r, echo=F}
+mymodel<-lm(Mort~Precip+Educ+NonWhite+log(NOX)+log(SO2),data=air)
+par(mfrow=c(2,2))
+plot(Mort~SO2,data=air)
+plot(Mort~log(SO2),data=air)
+plot(Mort~NOX,data=air)
+plot(Mort~log(NOX),data=air)
+par(mfrow=c(1,1))
+
+```
+
+## Exercise 2: Predicting Fish Weights
+This will be a quick exercise in writing a contrast. The fish data set includes weight, height, width, and 3 length measurements for seven different species of fish.  
+
+A quick exploration between the relationships between log(weight) and Length1 for the different species suggests that they potentially have different slopes.  
+
+```{r}
+setwd("~/Desktop/CourseDev/Unit 1/HW")
+fish<-read.csv("fish.csv",header=T,stringsAsFactors = T)
+summary(fish)
+library(ggplot2)
+ggplot(fish,aes(x=Length1,y=log(Weight),color=Species))+geom_point()+geom_smooth(method="lm")
+```
+
+A. Fit a model so that individual intercepts and slopes are fitted for each species.  Use the contrast framework to estimate the slope for the Smelt species. Provide a formal interpretation of this slope and include a 95 percent confidence interval. You do not need to provide a formal interpretation of the interval, just the slope value (point estimate).
+
+B. (Stretch question)  Suppose I wanted to formally test if the slope for the pike species is different from the slope of the smelt.  What contrast could we construct to formally test this?  Hint: Determine the beta's that are involved in each one of the indviduals slopes and subtract one from the other.
+```{r}
+mymodel<-lm(log(Weight)~Length1*Species,data=fish)
+summary(mymodel)
+par(mfrow=c(2,2))
+plot(mymodel)
+```
+
+## Exercise 3
+The following code simulates a data set that follows a trend that is a 4th degree polynomial.  Below is a plot of the data along with residual plots from regression model. 
+```{r}
+set.seed(1234)
+x<-runif(100,-6,6.5)
+trend<- 2*x^4-2*x^3-50*x^2+100*x+2
+y<-trend+rnorm(100,0,100)
+mymodel<-lm(y~poly(x,2))
+
+par(mfrow=c(1,3))
+plot(x,y)
+plot(mymodel$fitted.values,mymodel$residuals,ylab="Residuals",xlab="Fitted")
+plot(x,mymodel$residuals,ylab="Resdiduals")
+par(mfrow=c(1,1))
+```
+
+
+A. Using the graphics, explain to a layman why the current model being fitted is not a good fit to the data set. 
+
+B. To help the laymen better understand, repeat the graphics using different polynomial fits to illustrate what a better model fit would look.
+
+
+
+

@@ -1,0 +1,54 @@
+---
+title: "Unit 11 HW"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1:  Conceptual Questions
+A.  What is the main issue with fitting an MLR on a binary response coded as 0 or 1?
+B.  What must we do to a logistic regression coefficient to interpret it as an odds ratio?
+C.  If we wanted to interpret an odds ratio for a 20-unit increase (rather than a one-unit increase) of a continuous predictor, what is the general formula to obtain this estimate?
+D.  A logistic regression model was fitted to a data set with the following equation $log \Big( \frac{\pi}{(1-\pi)}\Big)= -4+.8X$.  What is the predicted probability of the positive class (event) occurring for a new observation at $X=3.2$?
+
+
+## Exercise 2:  Coronary Artery Disease and Age
+
+A.  In the pre-live session, we examined the effects of sex and ECG on whether a person has coronary artery disease.  Age most certainly has an impact as well.  Go back and provide an exploratory analysis on age using the CAD data set.  Include a loess plot, summary statistics for age by disease status, and a box plot of age by disease status.  Comment on your findings.
+
+B.  Perform a logistic regression analysis using age.  Provide a formal write-up of the hypothesis test and interpret the coefficient.  Provide a 95 percent confidence interval as well.
+
+
+## Exercise 3: Gas Mileage and Engine Size 
+The following code modifies the miles per gallon data set by converting the response to a binary outcome and cleans up the data set a little bit including dropping the three and five cylinder vehicles.
+```{r pressure, echo=FALSE}
+library(ISLR)
+newAuto<-Auto
+#Creating a categorical response for illustrative purposes.
+newAuto$mpg<-factor(ifelse(Auto$mpg>median(Auto$mpg),"High","Low"))
+newAuto$cylinders<-factor(newAuto$cylinders)
+#Removing data with 3 and 5 cylinders and making sure are R treats the predictor with just 3 levels and not 5.
+newAuto<-newAuto[-which(newAuto$cylinders %in% c(3,5)),]
+newAuto$cylinders<-factor(newAuto$cylinders)
+head(newAuto)
+
+```
+
+A.  Provide an exploratory analysis of the relationship of the categorical Miles per gallon variable and the number of cylinders. Include at least one graphic and summary proportions.  Explain what your results are saying.
+
+B.  Perform a logistic regression model using just the single predictor cylinders.  Provide a good interpretation of the coefficients that makes the most sense for this problem.
+
+C. Provide an odds ratio for all three comparisons involving the cylinder groups?  (four vs. six, four vs. eight, and six vs. eight)
+
+
+## Exercise 4:  Quick Investigation
+Suppose a friend came to you with a data set that you have pinned as a logistic regression problem.  Suppose he gives you the data set to analyze.  The response is binary and the predictor is continuous.  Explore this data set to determine whether logistic regression will indeed work for this data set and if so, complete the analysis and provide a generic interpretation of the coefficients.  If it is not appropriate, explain.
+```{r, eval=F}
+setwd("/Users/jturner/Desktop/CourseDev/Unit 11/HW")
+help<-read.csv("Investigate.csv",stringsAsFactors = T)
+head(help)
+```
+

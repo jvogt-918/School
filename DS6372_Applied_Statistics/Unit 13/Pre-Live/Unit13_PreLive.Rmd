@@ -1,0 +1,129 @@
+---
+title: "Unit 13 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1:  PCA Basics Review
+For this discussion we will be utilizing a data set that was a study investigating potential civil rights violations among insurance companies operating in Chicago, Illinois.  A description of the data set can be found as well as a description for each variable.  Please take the time and read through the description before continuing.
+```{r cars}
+library(Sleuth3)
+mydata<-ex1716
+head(mydata)
+names(mydata)
+#?ex1716  Run this for description.
+```
+
+For this exercise we will be treating the `Vol` variable as the response because it indicates the number of new policies provided per 100 housing units.  These new policies were argued to be favorable to certain locations within Chicago and these policies were not offered to others.  The age, income, race, theft, and fire variables will be considered as potential predictors of the voluntary new policies awarded by insurance companies. We will ignore the `Invol` variable.
+
+In a regression or classification setting, PCA would be applied to the predictors to help lower the number of predictors to use.  Lets run through a few computations and answer some basic questions about our understanding of PCA
+
+A.  First off lets observe basic summary statistics of the predictor variables. Make note of anything interesting.  Additionally, create a scatter plot and correlation matrix of the five predictor variables.
+```{r}
+library(dplyr)
+library(tidyr)
+
+
+
+mysummary <- mydata %>%
+  select(Fire, Theft, Age, Income,Race) %>% # select variables to summarise
+  summarise_each(funs(min = min, 
+                      q25 = quantile(., 0.25), 
+                      median = median, 
+                      q75 = quantile(., 0.75), 
+                      max = max,
+                      mean = mean, 
+                      sd = sd,
+                      variance= var))
+
+# reshape it using tidyr functions
+
+clean.summary <- mysummary %>% gather(stat, val) %>%
+  separate(stat, into = c("var", "stat"), sep = "_") %>%
+  spread(stat, val) %>%
+  select(var, min, max, mean, sd,variance) # reorder columns
+print(clean.summary)
+```
+
+B.  The following code produces three key results. The eigenvectors, eigenvalues, and a scree plot from a PCA analysis that uses the covariance matrix rather than the correlation matrix. Note this is not typically what is done. What is the scree plot telling us here?  Comment on the "weirdness" of the eigen vector for the first PC.  Any thoughts on why this occurred?
+```{r}
+pc.result<-prcomp(mydata[,2:6],scale.=FALSE)
+
+#Eigen Vectors
+pc.result$rotation
+
+#Eigen Values
+eigenvals<-pc.result$sdev^2
+eigenvals
+
+#Scree plot
+par(mfrow=c(1,2))
+plot(eigenvals,type="l",main="Scree Plot",ylab="Eigen Values",xlab="PC #")
+plot(eigenvals/sum(eigenvals),type="l",main="Scree Plot",ylab="Prop. Var. Explained",xlab="PC #",ylim=c(0,1))
+cumulative.prop<-cumsum(eigenvals/sum(eigenvals))
+lines(cumulative.prop,lty=2)
+
+```
+
+C.  We can extract the new variables created from PCA by using the following command.  I am going to append the response variable to the data set for future work.
+```{r}
+pc.scores<-pc.result$x
+pc.scores<-data.frame(pc.scores,Vol=ex1716$Vol)
+```
+Use this new data set and compute the same summary statistics on these new variables.  Examine the variance's for these new variables.  Do they look familiar?
+
+D.  Create a scatterplot matrix for these new variables to visualize that they are uncorrelated
+
+E.  Run the PCA analysis again this time setting the scale option to true. Compare the eigenvectors, eigenvalues, and scree plot from the first run.  How does the interpretation of the first principle component change?
+
+During the live session, we will investigate a regression model using the original variables and a regression model using the PCs to further the discussion. 
+
+
+## Discussion 2:  Image Compression
+This following bulleted list of commands will demonstrate the image compression example discussed in the videos. There is really nothing due for this section.  It is just for curious students. 
+
+1.  Load in the packages to read in a JPEG file. It also contains a function to write objects back to JPEG. Note that the object is just an array with three matrices: one each for red, green, and blue channels. Each matrix is 516 rows by 470 columns.
+```{r }
+library(jpeg)
+#library(magick)
+setwd("~/Desktop/CourseDev/Unit 13/PreLive")
+photo<-readJPEG("Luna.jpg")
+dim(photo)
+attributes(photo)
+```
+2.  The next step is to perform data reduction using PCA. 
+```{r}
+pcaR<-prcomp(photo[,,1],scale.=T)
+pcaG<-prcomp(photo[,,2],scale.=T)
+pcaB<-prcomp(photo[,,3],scale.=T)
+```
+
+3.  Load in the function Dr. Turner provided that does the matrix multiplication to go from PCs back to the original variables scale.
+```{r}
+#Function here always assumes you are centering and scaling variables
+pc.approx<-function(pcres,num){
+  n<-nrow(pcres$x)
+  #X.approx<-(pcres$x[,1:num]%*%t(pcres$rotation[,1:num])+rep(pcres$center,each=n))/rep(pcres$scale,each=n)
+  X.approx<-rep(pcres$scale,each=n)*(pcres$x[,1:num]%*%t(pcres$rotation[,1:num]))+rep(pcres$center,each=n)
+  names(X.approx)<-names(pcres$center)
+  X.approx
+}
+
+```
+
+4.  Store the PCA results in a list, and apply the transformation function using just 20 PCs. Image is then written to your working directory.  You can change the number of PCs to see how the image changes.
+```{r}
+pcaRGB<-list(pcaR,pcaG,pcaB)
+
+compImage<-sapply(pcaRGB,pc.approx,num=20,simplify='array')
+
+setwd("~/Desktop/CourseDev/Unit 13/PreLive")
+writeJPEG(compImage,"Luna_PC20.jpg")
+#File will be much smaller than original
+
+```
+

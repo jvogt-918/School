@@ -1,0 +1,91 @@
+---
+title: "Unit 12 HW"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1: Conceptual Questions
+
+A.  Name at least two advantages that logistic regression has over LDA.
+B.  Does logistic regression predict the binary outcome or does it predict something else?  Explain.
+C.  True or false?  Multicollinearity is not typically an issue with LDA. However it is still an issue for logistic regression.
+D.  Briefly explain the separability problem that multiple logistic regression can sometimes suffer from.
+
+## Exercise 2: Natural Selection within House Sparrows
+Hermon Bumpus conducted an observational study noting that not all house sparrows survived a severe winter storm in 1898.  He collected the measurements on the dead sparrows and then subsequently obtained the same measurements on birds that survived the winter.  The data set is located in the `Sleuth3` package.  The following code loads the data in and makes some formatting changes to save the student some time.  Use `?ex2016` to obtain additional detail on the predictors in the data set.
+```{r}
+library(Sleuth3)
+bumpus<-ex2016
+bumpus$Status.Num<-ifelse(bumpus$Status=="Survived",1,0)
+bumpus$AG<-factor(bumpus$AG)
+head(bumpus)
+#?ex2016 to obtain details on the variables
+```
+
+A.  Perform an exploratory analysis of the data set to identify potential trends between the survival status and the predictors.  At a minimum you should explore a scatter plot matrix for separability and for multicollinearity, and you should examine loess plots for the numeric  variables and bar plots for the age categorical variable. Write a brief report of what you see.  You do not need to consider interactions for this problem.
+
+```{r}
+library(ggplot2)
+ggplot(bumpus,aes(x=HL,y=Status.Num))+geom_point()+
+  geom_smooth(method="loess",size=1,span=1)+
+  ylim(-.2,1.2)
+```
+
+
+B.  Fit a full model using all of the available predictors. Examine the VIFs of the model (same way you do for MLR) and perform the Hosmer-Lemeshow goodness of fit.  Comment on what these outputs are telling us about the model fit.  Some example code of implementing Hosmer-Lemeshow follows:
+```{r, eval=F}
+mymodel<-glm(Status~AG+TL+AE+WT+BH+HL+FL+TT+SK+KL,data=bumpus,family="binomial")
+summary(mymodel)
+library(car)
+vif(mymodel)
+library(ResourceSelection) 
+hoslem.test(mymodel$y,fitted(mymodel))
+```
+
+C.  Provide a summary of what predictors are relevant to the sparrows survival by conducting a formal test at the 0.10 level for each one.  For the significant ones, provide an interpretation of their effects in terms of odds ratio and provide a confidence interval.
+
+D.  Although we most likely could reduce the model further, we have answered the main researchers questions by fitting a full model and reporting the results of the test.  We can always reduce the model down to only the relevant predictors to make the model more interpretable.  Do this now and provide an effects plot for the parsimonious model. Note that because this is additive, you can provide the effect plot for each predictor one at a time without losing much information.  You do not need to add commentary to this question but examine the plots to make sure they make sense with your coefficients.
+
+## Exercise 3:  Breast Cancer Diagnostic
+The data set downloaded from the internet, contains measures obtain from tumor tissue in a cancer lab.  The golden standard to diagnosing cancer is that an expert looks under a microscope, takes additional measurements, and makes a final call on whether the tumor is cancerous (malignant) or not (benign).  The question is, can a predictive model effectively predict the gold standard using just the measurements alone.  If so, this could effectively eliminate user error due to fatigue or distraction.  The data set is loaded here and divided into a training and validation set:
+
+```{r }
+bc<-read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data",header=F,sep=",")
+names(bc)<- c('id_number', 'diagnosis', 'radius_mean', 
+              'texture_mean', 'perimeter_mean', 'area_mean', 
+              'smoothness_mean', 'compactness_mean', 
+              'concavity_mean','concave_points_mean', 
+              'symmetry_mean', 'fractal_dimension_mean',
+              'radius_se', 'texture_se', 'perimeter_se', 
+              'area_se', 'smoothness_se', 'compactness_se', 
+              'concavity_se', 'concave_points_se', 
+              'symmetry_se', 'fractal_dimension_se', 
+              'radius_worst', 'texture_worst', 
+              'perimeter_worst', 'area_worst', 
+              'smoothness_worst', 'compactness_worst', 
+              'concavity_worst', 'concave_points_worst', 
+              'symmetry_worst', 'fractal_dimension_worst')
+
+#Getting a look at the distribution of the response
+table(bc$diagnosis)
+
+#Train/Validation Split
+library(caret)
+set.seed(1234)
+trainIndex<-createDataPartition(bc$diagnosis,p=.5,list=F)  #p: proportion of data in train
+
+training<-bc[trainIndex,]
+validate<-bc[-trainIndex,]
+
+```
+
+A.  The predictors in this data set are highly correlated.  Because this exercise really only cares about prediction, we can worry less about this.  Feature selection techniques such as GLMNET tend to dampen multicollinearity in the model as well.  Train a GLMNET model using 10-fold CV on the training data.  You may use the logloss or AUROC curve error metrics.  Comment on which predictors were left or dropped, whichever is shorter. 
+
+B.  For comparisons, train a KNN model under the same CV settings as part A.  Provide an ROC curve with both models overlayed.  Do the models curves behave similarly or not?  Report the two models AUROC values as well.
+
+C.  Compute the full confusion matrices using the best threshold provided by the ROC curve functions.  No commentary is needed I just want you to practice thresholding again. It has been a while.  Just note that when choosing a threshold this way we are not taking into account the prevalence (see unit 9 discussions)
+

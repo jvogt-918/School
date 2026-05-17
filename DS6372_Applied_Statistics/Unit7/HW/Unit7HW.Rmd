@@ -1,0 +1,63 @@
+---
+title: "Unit 7 HW"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1:  Conceptual questions
+A.  What is the primary impact on running a regression model and ignoring the fact that the data has repeated measures in it?
+
+B.  If the pattern of a correlogram shows that the correlation stay relatively constant across the difference in time of your residuals, what correlation structure would be appropriate to model that behavior?
+
+C.  Load in the **nlme** package and type `?corStruct`. Provide a list of the correlation structure names. Keep this in mind that while we've explored AR1 (corExp) and CS (corCompSymm), we can always try others to get a better fit. 
+
+## Exercise 2:  Brain Sites of Short and Long Term Memory
+In the late 1980s and early 1990s, it was hypothesized that the hippocompal region of brain is a potential site for short term memory and not long term memory.  To test this, 18 monkeys were given training to discriminate 100 pairs of objects. After their training, 11 monkey were randomly selected and went through a procedure that had access to their hippocampal formations blocked.  The remaining 7 were left untreated.  
+
+The interesting bit here is that not all 100 pairs of objects were trained at the same time.  20 were trained to all the monkeys 2 weeks prior to the blockage, 20 were trained 4 weeks prior, and 20 at 8,12, and 16 weeks prior.
+After the blockage to the hippocampus all monkeys were then given a test to see how many pairs of objects they could discriminate. If there hypothesis was true, there should be a difference between the two groups of monkeys when looking at their performance of objecst trained 2 and 4 weeks prior (short term memory) while there should not be much of a difference for the objects for later times prior (long term memory).
+
+A plot of the data set is below. The reponse is the `NewPercentCorrect` variables which is the percentage of correct objects for each of the 20 items at each training week.  Use the data set to answer the following questions
+
+```{r , echo=F, message=F}
+setwd("~/Desktop/CourseDev/Unit 7/HW")
+monkey<-read.csv("monkey.csv",stringsAsFactors = T)
+#monkey$Week_Fac<-factor(monkey$Week)
+
+library(tidyverse)
+
+statsMonkey<-monkey %>%
+  group_by(Treatment,Week) %>%
+  summarise(
+    count=n(),
+    PerCorrect=mean(NewPerCorrect),
+    sdIFIT=sd(NewPerCorrect)/sqrt(count),
+    lower=PerCorrect-2*sdIFIT,
+    upper=PerCorrect+2*sdIFIT
+  )
+
+library(ggplot2)
+prof.mean<-ggplot(statsMonkey,aes(x=Week,y=PerCorrect,color=Treatment,shape=Treatment))+
+  geom_line()+
+  geom_point(size=2.5)+
+  labs(y="Mean Percent Correct (new)")+
+  scale_color_manual(values=c("black","skyblue"))+
+  scale_shape_manual(values=c(15,16))+
+  ylim(45,90)+
+  guides(shape="none")+
+  theme_bw()
+
+prof.mean+geom_errorbar(aes(ymin=lower,ymax=upper,color=Treatment),width=2)
+```
+
+A.  Based on the graph, it doesn't appear that the trend is linear to model Week as a numeric variable.  Additionally the question of interest is to examine what is going on between the treatment versus control at each training week (prior to hippocampal blockage) so treating it as a factor will be helpful.  Based on the graph do you think an interaction term is needed between Treatment and Week? Explain your view point.
+
+B.  Use the modeling codes from the Prelive Assignment to obtain a correlogram of the residuals fitted by a basic MLR model. Be sure to include Week as a factor variable and not numeric. Comment on whether it is obvious on whether a specific correlation structure would work well or not.
+
+C.  Fit two repeated measures models, one compound symmetry and one AR1. Compare the AIC values. You can optionally try the unstructured one if it will run.
+
+D.  Based on the best AIC fit, use similar codes from the pre live assignment to compare the treatment groups at each Week using a Bonferroni correction.  Does the data conclude that the researchers hypothesis appears reasonable?  Point to which tests support your answer.

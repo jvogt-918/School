@@ -1,0 +1,263 @@
+---
+title: "Unit 9 HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Exercise 1: Conceptual Questions
+A.  State the assumptions of the LDA model.
+
+LDA Assumption:
+- Predictors follow a normal distributions
+- The classes have equal covariance
+- The seperation between classes are closer to a straight line.
+
+B.  What is the fundamental difference between the LDA and QDA model?
+
+The differences between LDA and QDA are the boundaries. LDA models have a straighter boundaries while QDA have curvature that allows these models to fit more nuanced data. 
+
+C.  What is a confusion matrix? 
+
+A table that has data on the classification performance of a model. 
+
+D.  What is the fundamental difference between sensitivity and precision (positive predictive value)?
+
+Although both of them deal with positive predictions, the difference seems small, but are DIFFERENT. Sensitivity is how correct is correct. Basically how well does the model dectect correctly. PPV is about how correct are the positive predictions. Basically if the model says you have the flu, what is the likelihood of that prediciton being true. 
+
+## Exercise 2: Decision Boundary Investigation
+Consider the following data set:  
+```{r cars}
+library(RSSL)
+set.seed(1234)
+mydata<-generateCrescentMoon(200,2,2)
+mydata$Class<-factor(ifelse(mydata$Class=="+","Yes","No"))
+plot(mydata$X1,mydata$X2,col=mydata$Class,asp=1,pch=16,cex=.7,xlab="X1",ylab="X2")
+
+```
+
+A.  Would a KNN model or LDA/QDA model fare better for this example? State your reasons.  If you are stumped, complete part B and come back.
+
+Due to the nonlinear boundaries, KNN would fare the best this dataset. Although QDA do allow for some curvature, this particular dataset have too many curves, as the code implies "crescent moon" shape.
+
+B.  The following code fits a KNN model using the `caret` package and provides a visualization of the prediction boundary.  Repurpose the code to see what the decision boundary is for an LDA model and a QDA model.
+
+I know its messy and I just copied and pasted more than what I needed
+
+```{r}
+library(caret)
+fitControl<-trainControl(method="repeatedcv",number=5,repeats=1,classProbs=TRUE, summaryFunction=mnLogLoss)
+set.seed(1234)
+
+#knn
+knn.fit<-train(Class~X1+X2,
+               data=mydata,
+               method="knn",
+               trControl=fitControl,
+               metric="logLoss")
+
+
+#Creating a validation set across the whole graph
+validate <- expand.grid(X1=seq(-10, 10, by=0.25), # sample points in X1
+                  X2=seq(-15, 15, by=0.5)) # sample points in X2
+
+#Computing predicted probabilities on the training data
+predictions <- predict(knn.fit, validate, type = "prob")[,"Yes"]
+
+threshold=0.5
+class_pred = as.factor(ifelse(predictions>threshold, "1", "0"))
+
+color_array <- c("black", "red")[as.numeric(class_pred)] 
+
+par(mfrow=c(1,2))
+plot(mydata$X1,mydata$X2,col=mydata$Class,asp=1,pch=16,cex=.7,xlab="X1",ylab="X2")
+plot(validate,col=color_array,pch=20,cex=0.15)
+par(mfrow=c(1,2))
+
+fitControl<-trainControl(method="repeatedcv",number=5,repeats=1,classProbs=TRUE, summaryFunction=mnLogLoss)
+set.seed(1234)
+
+#qda
+knn.fit<-train(Class~X1+X2,
+               data=mydata,
+               method="qda",
+               trControl=fitControl,
+               metric="logLoss")
+
+
+#Creating a validation set across the whole graph
+validate <- expand.grid(X1=seq(-10, 10, by=0.25), # sample points in X1
+                  X2=seq(-15, 15, by=0.5)) # sample points in X2
+
+#Computing predicted probabilities on the training data
+predictions <- predict(knn.fit, validate, type = "prob")[,"Yes"]
+
+threshold=0.5
+class_pred = as.factor(ifelse(predictions>threshold, "1", "0"))
+
+color_array <- c("black", "red")[as.numeric(class_pred)] 
+
+par(mfrow=c(1,2))
+plot(mydata$X1,mydata$X2,col=mydata$Class,asp=1,pch=16,cex=.7,xlab="X1",ylab="X2")
+plot(validate,col=color_array,pch=20,cex=0.15)
+par(mfrow=c(1,2))
+
+#lda
+knn.fit<-train(Class~X1+X2,
+               data=mydata,
+               method="lda",
+               trControl=fitControl,
+               metric="logLoss")
+
+
+#Creating a validation set across the whole graph
+validate <- expand.grid(X1=seq(-10, 10, by=0.25), # sample points in X1
+                  X2=seq(-15, 15, by=0.5)) # sample points in X2
+
+#Computing predicted probabilities on the training data
+predictions <- predict(knn.fit, validate, type = "prob")[,"Yes"]
+
+threshold=0.5
+class_pred = as.factor(ifelse(predictions>threshold, "1", "0"))
+
+color_array <- c("black", "red")[as.numeric(class_pred)] 
+
+par(mfrow=c(1,2))
+plot(mydata$X1,mydata$X2,col=mydata$Class,asp=1,pch=16,cex=.7,xlab="X1",ylab="X2")
+plot(validate,col=color_array,pch=20,cex=0.15)
+par(mfrow=c(1,2))
+
+```
+
+## Exercise 3: LDA and thresholding practice
+The cancer data set contains multiple genetic variables in their bloood measured on patients with tumors in the throat/esophagus. After surgery, the tumors were biopsied and classified as malignant or benign.  The data set actually has 4 data sets merged together from different hospitals. For this exercise, the code below is going to collapse them into a sing train/validation split. The censor variable is the response code as 0 and 1.  
+
+```{r pressure, echo=FALSE}
+library(GGally)
+setwd("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit9/HW/")
+cancer<-read.csv("CancerExample.csv",stringsAsFactors = T)
+
+cancer$Status <- factor(ifelse(cancer$Censor == 0, "Benign", "Malignant"),
+                        levels = c("Benign", "Malignant"))
+
+gene_cols <- c("V1","V2","V3","V4","V5","V6","V7","V8","V9")
+
+index<-which(cancer$Set=="Training")
+index2<-which(cancer$Set=="Validation I")
+training <- cancer[cancer$Set == "Training", c(gene_cols, "Status")]
+validate <- cancer[cancer$Set == "Validation I", c(gene_cols, "Status")]
+
+ggpairs(training, aes(color = Status, alpha = 0.5))
+```
+
+A.  Recode the response variable so that it is a factor with levels Benign (cancer) and Malignant (healthy). Make sure the recoded response exists in both training and validation sets. Provide a `ggpairs` plot of the nine genetic predictor variables by cancer status on the training data. Do the assumptions of LDA look reasonable?  Does it look like the predictors will be able to predict the response effectively given how LDA tries to classify? Provide commentary and offer a suggestion to fix issues if you mention any. 
+
+The data does not meet the assumptions of a LDA. The strongest violation is the boundary. There isn't a clear delineation between the two status and they share alot of overalp. LDA will struggle to classify what may or may not be benign or malignant, due to the overlapping statuses. We could try to transform data points to further illustrate the dilneation or change the model to a more forgiving/flexible choice, like randomForest or knn. 
+
+B.  Compute an LDA model on the training data and compute the confusion matrix on the validation set using a threshold of 0.5.  Underneath this setting is the classification more specific or more sensitive? These data sets are not random samples so we can not really look into PPV and NPV that closely.  Compute a second confusion matrix by changing the threshold to get something that has an even balance between sensitivity and specificity. Note: This is not about reading into the values but rather working through the computational steps.
+
+The settings were more specific with a threshold of .5
+
+```{r Discussion 3 B.}
+library(MASS)
+lda_fit <- lda(Status ~ ., data = training)
+
+lda_pred <- predict(lda_fit, validate)
+probs_malignant <- lda_pred$posterior[, "Malignant"]
+
+pred_class_05 <- ifelse(probs_malignant > 0.5, "Malignant", "Benign")
+pred_class_05 <- factor(pred_class_05, levels = c("Benign", "Malignant"))
+
+confmat_05 <- table(Predicted = pred_class_05, Actual = validate$Status)
+print(confmat_05)
+
+sensitivity_05 <- confmat_05["Malignant","Malignant"] / sum(confmat_05[, "Malignant"])
+specificity_05 <- confmat_05["Benign","Benign"] / sum(confmat_05[, "Benign"])
+print(c(Sensitivity=sensitivity_05, Specificity=specificity_05))
+
+#Second Conf Matrix
+pred_class_05 <- ifelse(probs_malignant > 0.3, "Malignant", "Benign")
+pred_class_05 <- factor(pred_class_05, levels = c("Benign", "Malignant"))
+
+confmat_05 <- table(Predicted = pred_class_05, Actual = validate$Status)
+print(confmat_05)
+
+sensitivity_05 <- confmat_05["Malignant","Malignant"] / sum(confmat_05[, "Malignant"])
+specificity_05 <- confmat_05["Benign","Benign"] / sum(confmat_05[, "Benign"])
+print(c(Sensitivity=sensitivity_05, Specificity=specificity_05))
+
+```
+
+## Exercise 4:  Curse of Dimensionality
+The following code simulates a training and validation set from multivariate normal distributions.  The first two predictors are important  while the remaining predictors are just random noise. I've included a plot of the first five for verification.
+```{r}
+library(mvtnorm)
+set.seed(1234)
+muYes<-c(10,10)
+muNo<-c(8,8)
+Sigma<-matrix(c(1,.8,.8,1),2,2,byrow=T)
+nY<-30
+nN<-30
+dataYes<-rmvnorm(nY,muYes,Sigma)
+dataNo<- rmvnorm(nN,muNo,Sigma)
+train<-rbind(dataYes,dataNo)
+train<-data.frame(train)
+for (i in 3:20){
+ train<-cbind(train,rnorm(nY+nN))
+}
+names(train)<-paste("X",1:20,sep="")
+
+train$Response<-rep(c("Yes","No"),each=30)
+train$Response<-factor(train$Response)
+
+#Creating a validation set
+muYes<-c(10,10)
+muNo<-c(8,8)
+Sigma<-matrix(c(1,.8,.8,1),2,2,byrow=T)
+nY<-500
+nN<-500
+dataYes<-rmvnorm(nY,muYes,Sigma)
+dataNo<- rmvnorm(nN,muNo,Sigma)
+validate<-rbind(dataYes,dataNo)
+validate<-data.frame(validate)
+for (i in 3:20){
+  validate<-cbind(validate,rnorm(nY+nN))
+}
+names(validate)<-paste("X",1:20,sep="")
+
+validate$Response<-rep(c("Yes","No"),each=500)
+validate$Response<-factor(validate$Response)
+
+pairs(train[,1:5],col=rep(c("red","black"),each=30))
+```
+
+A.  Fit an LDA model on the training data using just the first two predictions $X1$ and $X2$.  Observe the overall accuracy on the validation set.  (Do not worry about the other metrics for this exercise, but it might be interesting to examine those as well.)
+```{r D4 A.}
+fit_2 <- lda(Response ~ X1 + X2, data = train)
+pred_2 <- predict(fit_2, validate)
+acc_2 <- mean(pred_2$class == validate$Response)
+print(acc_2)
+```
+
+B.  Fit an additional LDA model using the first 10 predictors which will include eight random noise predictors. Observe the overall accuracy on the validation set.
+
+```{r D4 B.}
+fit_10 <- lda(Response ~ X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = train)
+pred_10 <- predict(fit_10, validate)
+acc_10 <- mean(pred_10$class == validate$Response)
+print(acc_10)
+```
+C.  Repeat again one last time using all 20 predictors (18 random noise predictors) and observe the overall accuracy on the validation set.  
+```{r D4 C.}
+full_formula <- as.formula(paste("Response ~", paste("X", 1:20, sep="", collapse="+")))
+fit_20 <- lda(full_formula, data = train)
+pred_20 <- predict(fit_20, validate)
+acc_20 <- mean(pred_20$class == validate$Response)
+print(acc_20)
+```
+D.  What trend do you see in the accuracy as you add more predictors that are just random noise?  This is referred to as the "curse of dimensionality" and also occurs in other algorithms such as KNN.  It highlights the importance of feature selection in the case of LDA. To make matters worse, these tools do not traditionally have feature selection procedures built in so we have to consider other tools for feature selection and only include variables that we think will truly be meaningful to safeguard against this issue.  There are some other strategies, one of which utilizes a technique called PCA which we will discuss later.
+
+The Accuracy of the model trends towards starts to decrease as you add in more predictors, especially irrelevant predictors. 

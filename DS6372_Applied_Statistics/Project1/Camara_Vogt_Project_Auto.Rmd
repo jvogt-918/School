@@ -1,0 +1,1622 @@
+---
+title: "Camara_Vogt_Project"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Library and ENV Variables
+
+##Libraries
+```{r Libraries, include=FALSE}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(skimr)
+library(corrplot)
+library(naniar)
+library(GGally)
+library(readr)
+library(dplyr)
+library(glmnet)
+library(scales)
+```
+
+##Importing the Data
+```{r Data Import, include=FALSE}
+setwd(dir =  "/Users/Owner/git/School/DS6372_Applied_Statistics/Project1/")
+auto <- read.csv(file = "AutoMSRP_Reduced.csv")
+head(auto)
+str(auto)
+glimpse(auto)
+```
+
+##Cleaning the Data
+Number of Door (impute)
+Engine HP (impute)
+Engine Cylinder (impute)
+Market Category (Has N/A, but keeping them as a category )
+
+Will need to create another model without outliers
+```{r Cleaning Data, include=FALSE}
+colSums(is.na(auto))
+vis_miss(auto)
+
+summary(auto$Number.of.Doors)  # probably Use Median
+summary(auto$Engine.HP) # Can Use Mean
+summary(auto$Engine.Cylinders) #Probably Median
+
+auto_omit <-na.omit(auto) #Omitting the missing Values ( will look into using imputation)
+vis_miss(auto_omit)
+
+auto_omit_continous <- auto_omit[, c("MSRP", "Year", "Engine.HP", "city.mpg")]
+
+auto_omit <- auto_omit %>%  #Factoring
+  mutate(
+    Make = as.factor(Make),
+    `Engine.Fuel.Type` = as.factor(`Engine.Fuel.Type`),
+    `Transmission.Type` = as.factor(`Transmission.Type`),
+    `Market.Category` = as.factor(`Market.Category`),
+    `Vehicle.Size` = as.factor(`Vehicle.Size`),
+    `Vehicle.Style` = as.factor(`Vehicle.Style`)
+#   `Engine.Cylinders` = as.factor(`Engine.Cylinders`),
+#  `Year` = as.factor(`Year`),
+#   `Driven_Wheels` = as.factor(`Driven_Wheels`)
+  )
+
+##Removing cols: Highway MPg, Cylinders, Vehicle Size, Doors, and make
+# List of columns to remove
+drop_cols <- c("highway.MPG", "Engine.Cylinders", "Vehicle.Size", "Number.of.Doors", "Make")
+
+# Remove columns using subset
+auto_omit_reduced <- auto_omit[, !names(auto_omit) %in% drop_cols]
+
+#Removing Outliers for better modeling
+cutoff <- quantile(auto_omit_reduced$MSRP, 0.99)
+auto_omit_reduced_no_outliers <- auto_omit_reduced[auto_omit_reduced$MSRP <= cutoff,]
+
+#Identify categorical columns (factor or character)
+cat_cols <- names(auto_omit_reduced)[sapply(auto_omit_reduced, function(x) is.factor(x) || is.character(x))]
+
+auto_omit <- auto_omit %>%
+  mutate(MPG_bin = cut(city.mpg, breaks = c(0, 15, 20, 25, 30, 35, 100),
+                       labels = c("<15","15-20","20-25","25-30","30-35","35+")))
+
+auto_omit_reduced_no_outliers <- auto_omit_reduced_no_outliers %>%
+  mutate(MPG_bin = cut(city.mpg, breaks = c(0, 15, 20, 25, 30, 35, 100),
+                       labels = c("<15","15-20","20-25","25-30","30-35","35+")))
+```
+
+#EDA
+##Data Summary and Early Relationship
+```{r Early EDA}
+#Stats on Missing data
+na_rows <- auto %>% filter(if_any(everything(), is.na))
+n_removed <- nrow(na_rows)
+cat("Rows removed due to NA:", n_removed, "\n")
+summary(na_rows)
+skim(na_rows)
+
+skimr::skim(auto_omit)
+
+ggpairs(auto_omit_continous)
+
+#BoxPlots
+#ggplot(auto_omit, aes(x= Make, y= MSRP)) + 
+#  geom_boxplot(outlier.shape = NA) + 
+#  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+#  labs(title = "Boxplot of MSRP by Car Make", x = "Make", y = "MSRP (USD)") +
+#  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(auto_omit, aes(x= Engine.Fuel.Type, y= MSRP)) +  ### Empty??
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "Boxplot of MSRP by Engine Fuel Type", x = "Engine Fuel Type", y = "MSRP (USD)") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(auto_omit, aes(x= Transmission.Type, y= MSRP)) + #Unknown LOL 
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "Boxplot of MSRP by Transmission", x = "Transmission Type", y = "MSRP (USD)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(auto_omit, aes(x= Transmission.Type, y= MSRP)) + #Unknown LOL 
+  geom_boxplot(outlier.shape = NA) + 
+  labs(title = "Boxplot of MSRP by Transmission", x = "Transmission Type", y = "MSRP (USD)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(auto_omit, aes(x= Market.Category, y= MSRP)) +  
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "Boxplot of MSRP by Market Category", x = "Market Category", y = "MSRP (USD)") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#ggplot(auto_omit, aes(x= Vehicle.Size, y= MSRP)) + 
+#  geom_boxplot(outlier.shape = NA) + 
+#  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+#  labs(title = "Boxplot of MSRP by Vehicle Size", x = "Vehicle Size", y = "MSRP (USD)") +
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(auto_omit, aes(x= Vehicle.Style, y= MSRP)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "Boxplot of MSRP by Vehicle Style", x = "Vehicle Style", y = "MSRP (USD)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Wayyyy too cluttered
+ggplot(auto_omit, aes(x = Vehicle.Style, y = MSRP, fill = Engine.Fuel.Type)) +
+  geom_boxplot(outlier.shape = NA, position = position_dodge(width = 0.8)) +
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "MSRP by Vehicle Style (colored by Fuel Type)", x = "Vehicle Style", y = "MSRP (USD)", fill = "Fuel Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(auto_omit, aes(x = Vehicle.Style, y = MSRP, fill = MPG_bin)) +
+  geom_boxplot(outlier.shape = NA, position = position_dodge(width = 0.8)) +
+  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+  labs(title = "MSRP by Vehicle Style (colored by city MPG group)", x = "Vehicle Style", y = "MSRP (USD)", fill = "City MPG") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggplot(auto_omit, aes(x= Engine.Cylinders, y= MSRP)) + 
+#  geom_boxplot(outlier.shape = NA) + 
+#  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+#  labs(title = "Boxplot of MSRP by Engine Cylinder", x = "Engine Cylinder", y = "MSRP (USD)") +
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggplot(auto_omit, aes(x= Year, y= MSRP)) + 
+#  geom_boxplot(outlier.shape = NA) + 
+#  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+#  labs(title = "Boxplot of MSRP by Year", x = "Year", y = "MSRP (USD)") +
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggplot(auto_omit, aes(x= Driven_Wheels, y= MSRP)) + 
+#  geom_boxplot(outlier.shape = NA) + 
+#  coord_cartesian(ylim = quantile(auto_omit$MSRP, c(0.05, 0.95))) +
+#  labs(title = "Boxplot of MSRP by Drive Type", x = "Drive Type", y = "MSRP (USD)") +
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ScatterPlots
+ggplot(auto_omit, aes(x = `Engine.HP`, y = MSRP)) +
+  geom_point() +
+  geom_smooth(method='lm')
+
+ggplot(auto_omit_reduced_no_outliers, aes(x = `Engine.HP`, y = MSRP, color = MPG_bin)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = 'lm', se = FALSE, color = "black") +
+  labs(
+    title = "Engine HP vs MSRP Colored by City MPG Bin",
+    x = "Engine HP",
+    y = "MSRP (USD)",
+    color = "City MPG Bin"
+  ) +
+  scale_y_continuous(labels = scales::comma)+
+  theme_minimal()
+
+ggplot(auto_omit, aes(x = `highway.MPG`, y = MSRP)) +
+  geom_point() +
+  geom_smooth(method='lm')
+
+ggplot(auto_omit_reduced_no_outliers, aes(x = city.mpg, y = MSRP)) +
+  geom_point(alpha = 0.7, color = "steelblue") +
+  geom_smooth(method = 'lm', se = TRUE, color = "darkred", fill = "pink") +
+  labs(
+    title = "Relationship Between City MPG and Car Price (MSRP)",
+    subtitle = "Most cars with high city MPG have lower MSRPs; exceptions may be electric or luxury models",
+    x = "City MPG (Miles per Gallon)",
+    y = "MSRP (USD)",
+    caption = "Source: AutoMSRP_Reduced.csv"
+  ) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+
+ggplot(auto_omit, aes(x = `Year`, y = MSRP)) +
+  geom_point() +
+  geom_smooth(method='lm')
+
+ggplot(auto_omit, aes(x = `Engine.Cylinders`, y = MSRP)) +
+  geom_point() +
+  geom_smooth(method='lm')
+
+#Corr Matrix
+cor_matrix <- cor(auto_omit_continous, use = "complete.obs")
+print(cor_matrix)
+corrplot(cor_matrix, method = "color")
+
+#Categorical Var. Fun Stats
+category_summary <- function(df, var) {
+  tab <- table(df[[var]])
+  data.frame(
+    Variable      = var,
+    N_Categories  = length(tab),
+    Most_Common   = names(tab)[which.max(tab)],
+    N_Most_Common = max(tab),
+    Least_Common  = names(tab)[which.min(tab)],
+    N_Least_Common = min(tab),
+    stringsAsFactors = FALSE
+  )
+}
+cat_summary <- do.call(rbind, lapply(cat_cols, function(x) category_summary(auto_omit_reduced_no_outliers, x)))
+
+print(cat_summary)
+
+
+#Removing MPG_bin for modeling purposes
+auto_omit <- dplyr::select(auto_omit, -MPG_bin)
+auto_omit_reduced_no_outliers <- dplyr::select(auto_omit_reduced_no_outliers, -MPG_bin)
+```
+
+#Feature Selection and Ojective 1 Model
+##Using Domain Knowledge to remove Attributes
+- City and Highway MPG have high correlation and measure very similar things
+- Engine HP and Cylinder are closely related
+- Vehicle Style and Size are also 
+- No. of Doors could also be connected to Style
+- Market Category and Make tend to be closely related as well. 
+
+Removing Highway.MPG, Engine.Cylinder, Vehicle.Size, No. of Doors, Make (The new DF will be created up above)
+
+
+```{r}
+# Full Model (all predictors) 
+full.model <- lm(MSRP ~ ., data = auto_omit_reduced)
+full.model_noout <- lm(MSRP ~ ., data = auto_omit_reduced_no_outliers)
+
+# Null Model (only intercept)
+null.model <- lm(MSRP ~ 1, data = auto_omit_reduced)
+null.model_noout <- lm(MSRP ~ 1, data = auto_omit_reduced_no_outliers)
+
+# Forward Selection 
+#MSRP ~ Market.Category + Engine.HP + Driven_Wheels + Transmission.Type + Vehicle.Style + city.mpg + Engine.Fuel.Type + Year #AIC 247273.4 (Noout)
+forward <- step(null.model, scope = formula(full.model), direction = "forward")
+forward_noout <- step(null.model, scope = formula(full.model_noout), direction = "forward")
+
+# Backward Elimination
+#MSRP ~ Market.Category + Engine.HP + Driven_Wheels + Transmission.Type + Vehicle.Style + city.mpg + Engine.Fuel.Type + Year
+backward <- step(full.model, direction = "backward")
+backward_noout <- step(full.model_noout, direction = "backward")
+
+# Stepwise Selection
+#MSRP ~ Market.Category + Engine.HP + Driven_Wheels + Transmission.Type + Vehicle.Style + city.mpg + Engine.Fuel.Type + Year
+stepwise <- step(null.model, scope = formula(full.model), direction = "both")
+stepwise_noout <- step(null.model, scope = formula(full.model_noout), direction = "both")
+
+#Each of the above feature selection had the exact same Model
+
+#Full Model and full model_noout Assumption
+par(mfrow = c(2, 2))
+plot(full.model)
+plot(full.model_noout)
+par(mfrow = c(1, 1))
+
+#penafull.model#penalized selection
+fitControl<-trainControl(method="repeatedcv",number=10,repeats=1) 
+
+glmnet.fit<-train(MSRP~.,
+               data=auto_omit_reduced,
+               method="glmnet",
+               trControl=fitControl
+               )
+opt.pen<-glmnet.fit$finalModel$lambdaOpt 
+#coef(glmnet.fit$finalModel,opt.pen)
+glmnet.fit
+
+#coefs <- coef(glmnet.fit$finalModel, glmnet.fit$finalModel$lambdaOpt)
+#active_predictors <- rownames(coefs)[as.numeric(coefs) != 0]
+#active_predictors
+plot(glmnet.fit)
+
+
+glmnet_noout.fit<-train(MSRP~.,
+               data=auto_omit_reduced_no_outliers,
+               method="glmnet",
+               trControl=fitControl
+               )
+opt.pen<-glmnet_noout.fit$finalModel$lambdaOpt 
+#coef(glmnet_noout.fit$finalModel,opt.pen)
+glmnet_noout.fit
+
+#coefs_noout <- coef(glmnet_noout.fit$finalModel, glmnet_noout.fit$finalModel$lambdaOpt)
+#active_predictors_noout <- rownames(coefs_noout)[as.numeric(coefs_noout) != 0]
+#active_predictors_noout
+
+#GLMNET_NOOUT ASSUMPTION
+##QQ Plot Normal Distribution is violated, the plot this would also apply for the glmnet WITH the outliers
+plot(glmnet_noout.fit, which=5)
+preds_noout <- predict(glmnet_noout.fit, newdata = auto_omit_reduced_no_outliers)
+residuals_noout <- auto_omit_reduced_no_outliers$MSRP - preds_noout
+df_resid_noout <- data.frame(Fitted = as.numeric(preds_noout), Residuals = as.numeric(residuals_noout))
+ggplot(df_resid_noout, aes(x=Fitted, y=Residuals)) +
+  geom_point() +
+  geom_hline(yintercept=0, linetype="dashed", color="red") +
+  labs(title="Residuals vs Fitted | glmnet")
+
+ggplot(data.frame(resid = resid(glmnet_noout.fit)), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title="QQ Plot of Residuals")
+```
+##Log Transforming MSRP
+We will transform the MSRP to resolve some assumption violations. The outliers are so strong that, we've decided to see what it looks like when you transfrom the log transform the msrp
+```{r}
+# Full Model (all predictors) -- LOG TRANSFORMATION
+full.model_log <- lm(log(MSRP) ~ ., data = auto_omit_reduced)
+full.model_noout_log <- lm(log(MSRP) ~ ., data = auto_omit_reduced_no_outliers)
+
+# Null Model (only intercept) -- LOG TRANSFORMATION
+null.model_log <- lm(log(MSRP) ~ 1, data = auto_omit_reduced)
+null.model_noout_log <- lm(log(MSRP) ~ 1, data = auto_omit_reduced_no_outliers)
+
+# Forward Selection -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Market.Category + Engine.HP + Engine.Fuel.Type + Vehicle.Style + city.mpg + Transmission.Type + Driven_Wheels #-20175.37 (NoOut) -20196.35(FULL)
+forward_log <- step(null.model_log, scope = formula(full.model_log), direction = "forward")
+forward_noout_log <- step(null.model_noout_log, scope = formula(full.model_noout_log), direction = "forward")
+
+
+# Backward Elimination -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Engine.Fuel.Type + Engine.HP + Transmission.Type + Driven_Wheels + Market.Category + Vehicle.Style + city.mpg #AIC: -20175.37 (NoOut) -20196.35 (FULL)
+backward_log <- step(full.model_log, direction = "backward")
+backward_noout_log <- step(full.model_noout_log, direction = "backward")
+
+
+# Stepwise Selection -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Market.Category + Engine.HP + Engine.Fuel.Type + city.mpg + Vehicle.Style + Transmission.Type + Driven_Wheels #AIC -20175.37(no out) -20196.35 (FULL)
+stepwise_log <- step(null.model_log, scope = formula(full.model_log), direction = "both")
+stepwise_noout_log <- step(null.model_noout_log, scope = formula(full.model_noout_log), direction = "both")
+
+
+# Assumption Plots for Log-Transformed Models
+par(mfrow = c(2, 2))
+plot(full.model_log)
+plot(full.model_noout_log)
+par(mfrow = c(1, 1))
+
+#
+# Penalized selection using log(MSRP)
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+
+glmnet_log.fit <- train(log(MSRP) ~ .,
+                       data = auto_omit_reduced,
+                       method = "glmnet",
+                       trControl = fitControl
+                      )
+opt.pen_log <- glmnet_log.fit$finalModel$lambdaOpt 
+coef(glmnet_log.fit$finalModel, opt.pen_log)
+glmnet_log.fit
+coefs_log <- coef(glmnet_log.fit$finalModel, glmnet_log.fit$finalModel$lambdaOpt)
+active_predictors_log <- rownames(coefs_log)[as.numeric(coefs_log) != 0]
+active_predictors_log
+
+plot(glmnet_log.fit)
+
+glmnet_noout_log.fit <- train(log(MSRP) ~ .,
+                             data = auto_omit_reduced_no_outliers,
+                             method = "glmnet",
+                             trControl = fitControl
+                            )
+opt.pen_noout_log <- glmnet_noout_log.fit$finalModel$lambdaOpt 
+#coef(glmnet_noout_log.fit$finalModel, opt.pen_noout_log)
+glmnet_noout_log.fit
+coefs_noout_log <- coef(glmnet_noout_log.fit$finalModel, glmnet_noout_log.fit$finalModel$lambdaOpt)
+active_predictors_noout_log <- rownames(coefs_noout_log)[as.numeric(coefs_noout_log) != 0]
+#active_predictors_noout_log
+
+# Predict and get residuals for log(MSRP)
+preds_noout_log <- predict(glmnet_noout_log.fit, newdata = auto_omit_reduced_no_outliers)
+residuals_noout_log <- log(auto_omit_reduced_no_outliers$MSRP) - preds_noout_log
+df_resid_noout_log <- data.frame(Fitted = as.numeric(preds_noout_log), Residuals = as.numeric(residuals_noout_log))
+
+# Residuals vs Fitted for log model
+library(ggplot2)
+ggplot(df_resid_noout_log, aes(x=Fitted, y=Residuals)) +
+  geom_point() +
+  geom_hline(yintercept=0, linetype="dashed", color="red") +
+  labs(title = "Residuals vs Fitted | glmnet log(MSRP)")
+
+# QQ Plot for log residuals
+ggplot(data.frame(resid = residuals_noout_log), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title = "QQ Plot of Residuals (log MSRP)")
+
+
+
+##Summary of coefficients 
+summary(full.model_noout_log)
+coefs_noout_log
+```
+
+#Objective 2 Complex MLR and Non-Parametric
+##EDA for Non-Parametric model
+#Adding interactions Engine.hp*Vehicle.Style, Engine.HP*Transmission.Type, city.mpg*Engine.Fuel.Type, Engine.hp^2, and city.mpg^2
+```{r}
+ggplot(auto_omit_reduced_no_outliers, aes(x=Engine.HP, y=log(MSRP))) +
+  geom_point() +
+  geom_smooth(method='lm')
+
+
+#Evidence of Interaction HP and Vehicle Style
+ggplot(auto_omit_reduced_no_outliers, aes(x = Engine.HP, y = MSRP, color = Vehicle.Style)) +
+  geom_point(alpha=0.3) +
+  geom_smooth(method = "lm") +
+  labs(title = "HP vs MSRP by Vehicle Style")
+
+m1 <- lm(MSRP ~ Engine.HP + Vehicle.Style, data = auto_omit_reduced_no_outliers)
+m2 <- lm(MSRP ~ Engine.HP * Vehicle.Style, data = auto_omit_reduced_no_outliers)  # add interaction
+anova(m1, m2) #Evidence that the interaction is significant
+
+#Evidence of Interaction HP and Transmission Type
+ggplot(auto_omit_reduced_no_outliers, aes(x = Engine.HP, y = MSRP, color = Transmission.Type)) +
+  geom_point(alpha=0.3) +
+  geom_smooth(method = "lm") +
+  labs(title = "HP vs MSRP by Transmission")
+
+m1 <- lm(MSRP ~ Engine.HP + Transmission.Type, data = auto_omit_reduced_no_outliers)
+m2 <- lm(MSRP ~ Engine.HP * Transmission.Type, data = auto_omit_reduced_no_outliers)  # add interaction
+anova(m1, m2) #Evidence that the interaction is significant
+
+#Fuel Type defnitely has an effect
+ggplot(auto_omit_reduced_no_outliers, aes(x = city.mpg, y = MSRP, color = Engine.Fuel.Type)) +
+  geom_point(alpha=0.3) +
+  geom_smooth(method = "lm") +
+  labs(title = "HP vs MSRP by Vehicle Style")
+
+data_no_electric <- filter(auto_omit_reduced_no_outliers, Engine.Fuel.Type != "electric")
+
+ggplot(data_no_electric, aes(x = city.mpg, y = MSRP, color = Engine.Fuel.Type)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  labs(title = "City MPG vs MSRP by Fuel Type")
+
+#Polynomial for HP?
+ggplot(auto_omit_reduced_no_outliers, aes(x=Engine.HP, y=log(MSRP))) + 
+  geom_point() + 
+  geom_smooth(method='loess')
+
+mod_linear <- lm(log(MSRP) ~ Engine.HP, data = auto_omit_reduced_no_outliers)
+mod_quad   <- lm(log(MSRP) ~ Engine.HP + I(Engine.HP^2), data = auto_omit_reduced_no_outliers)
+
+# Comparing models AIC is lower for quad, showing that its
+AIC(mod_linear, mod_quad)
+
+#PolyNomial for mpg?
+ggplot(auto_omit_reduced_no_outliers, aes(x=city.mpg, y=log(MSRP))) + 
+  geom_point() + 
+  geom_smooth(method='loess')
+
+##Checkwithout electric
+ggplot(data_no_electric, aes(x=Engine.HP, y=log(MSRP))) + 
+  geom_point() + 
+  geom_smooth(method='loess')
+
+mod_linear <- lm(log(MSRP) ~ city.mpg, data = auto_omit_reduced_no_outliers)
+mod_quad   <- lm(log(MSRP) ~ city.mpg + I(city.mpg^2), data = auto_omit_reduced_no_outliers)
+
+# Comparing models AIC is lower for quad, showing that its significant to keep it in the model
+AIC(mod_linear, mod_quad)
+```
+
+#Complex Model
+```{r}
+# Full model with main effects, polynomial, and interactions
+complex_model <- lm(
+  log(MSRP) ~ 
+    Year +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = auto_omit_reduced
+)
+
+complex_model_noout <- lm(
+  log(MSRP) ~ 
+    Year +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = auto_omit_reduced_no_outliers
+)
+
+AIC(complex_model)
+AIC(complex_model_noout)
+summary(complex_model_noout)
+
+#Complex Model Assumptions
+par(mfrow = c(2, 2))
+plot(complex_model)
+par(mfrow = c(1, 1))
+par(mfrow = c(2, 2))
+plot(complex_model_noout)
+par(mfrow = c(1, 1))
+```
+
+#Non-Parametric Model
+```{r Non-Parametric Models}
+#KNN_Full
+# 1. Select features
+features <- c("Year", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+knn_data <- auto_omit_reduced %>% select(MSRP, all_of(features))
+
+# 2. Train/test split
+set.seed(123)
+idx <- createDataPartition(knn_data$MSRP, p = 0.8, list = FALSE)
+train_set <- knn_data[idx, ]
+test_set  <- knn_data[-idx, ]
+
+# 3. Create dummy variables (one-hot encoding for categorical predictors)
+dummies   <- dummyVars(MSRP ~ ., data = train_set)
+train_enc <- predict(dummies, newdata = train_set)
+test_enc  <- predict(dummies, newdata = test_set)
+train_enc <- data.frame(MSRP = train_set$MSRP, train_enc)
+test_enc  <- data.frame(MSRP = test_set$MSRP, test_enc)
+
+# 4. Center/scale all numeric variables
+preproc     <- preProcess(train_enc, method = c("center", "scale"))
+train_prep  <- predict(preproc, newdata = train_enc)
+test_prep   <- predict(preproc, newdata = test_enc)
+
+# 5. Fit KNN on processed data
+set.seed(123)
+knn_fit <- train(
+  MSRP ~ .,
+  data = train_prep,
+  method = "knn",
+  tuneLength = 10,
+  trControl = trainControl(method = "cv", number = 5)
+)
+print(knn_fit)
+
+knn_preds <- predict(knn_fit, newdata = test_prep)
+
+ggplot(data = NULL, aes(x = test_prep$MSRP, y = knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    x = "Actual MSRP",
+    y = "Predicted MSRP (KNN)",
+    title = "Predicted vs Actual MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = knn_preds, y = test_prep$MSRP - knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(
+    x = "Predicted MSRP",
+    y = "Residuals (Actual - Predicted)",
+    title = "Residuals vs Predicted MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = test_prep$MSRP - knn_preds)) +
+  geom_histogram(bins = 40, fill = "#56B4E9", color = "white") +
+  labs(
+    x = "Prediction Error (Residuals)",
+    y = "Count",
+    title = "Distribution of Prediction Errors (KNN)"
+  )
+
+#KNN_NoOut
+
+# 1. Select features
+features <- c("Year", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+knn_data <- auto_omit_reduced_no_outliers %>% select(MSRP, all_of(features))
+
+# 2. Train/test split
+set.seed(123)
+idx <- createDataPartition(knn_data$MSRP, p = 0.8, list = FALSE)
+train_set <- knn_data[idx, ]
+test_set  <- knn_data[-idx, ]
+
+# 3. Create dummy variables (one-hot encoding for categorical predictors)
+dummies   <- dummyVars(MSRP ~ ., data = train_set)
+train_enc <- predict(dummies, newdata = train_set)
+test_enc  <- predict(dummies, newdata = test_set)
+train_enc <- data.frame(MSRP = train_set$MSRP, train_enc)
+test_enc  <- data.frame(MSRP = test_set$MSRP, test_enc)
+
+# 4. Center/scale all numeric variables
+preproc     <- preProcess(train_enc, method = c("center", "scale"))
+train_prep  <- predict(preproc, newdata = train_enc)
+test_prep   <- predict(preproc, newdata = test_enc)
+
+# 5. Fit KNN on processed data
+set.seed(123)
+knn_fit <- train(
+  MSRP ~ .,
+  data = train_prep,
+  method = "knn",
+  tuneLength = 10,
+  trControl = trainControl(method = "cv", number = 5)
+)
+print(knn_fit)
+
+knn_preds <- predict(knn_fit, newdata = test_prep)
+
+ggplot(data = NULL, aes(x = test_prep$MSRP, y = knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    x = "Actual MSRP",
+    y = "Predicted MSRP (KNN)",
+    title = "Predicted vs Actual MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = knn_preds, y = test_prep$MSRP - knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(
+    x = "Predicted MSRP",
+    y = "Residuals (Actual - Predicted)",
+    title = "Residuals vs Predicted MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = test_prep$MSRP - knn_preds)) +
+  geom_histogram(bins = 40, fill = "#56B4E9", color = "white") +
+  labs(
+    x = "Prediction Error (Residuals)",
+    y = "Count",
+    title = "Distribution of Prediction Errors (KNN)"
+  )
+
+#RandomForest_Full
+
+features <- c("Year", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+rf_data <- auto_omit_reduced[, c("MSRP", features)]
+rf_data_noout <- auto_omit_reduced_no_outliers[, c("MSRP", features)]
+
+set.seed(123)
+idx <- createDataPartition(rf_data$MSRP, p = 0.8, list = FALSE)
+train_set <- rf_data[idx, ]
+test_set <- rf_data[-idx, ]
+
+set.seed(123)
+rf_fit <- train(
+  MSRP ~ .,
+  data = train_set,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 3),  # 5-fold CV for tuning
+  ntree = 100  # Optional: set number of trees
+)
+print(rf_fit)
+
+
+set.seed(123)
+idx <- createDataPartition(rf_data_noout$MSRP, p = 0.8, list = FALSE)
+rf_noouttrain_set <- rf_data_noout[idx, ]
+rf_noouttest_set <- rf_data_noout[-idx, ]
+
+set.seed(123)
+rf_fit_noout <- train(
+  MSRP ~ .,
+  data = rf_noouttrain_set,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 3),  # 5-fold CV for tuning
+  ntree = 100  # Optional: set number of trees
+)
+print(rf_fit_noout)
+
+#Non-Parametric Summary
+summary(knn_fit)
+summary(rf_fit_noout$coefs)
+```
+
+
+Running a prediction Model that splits the data into train and test set
+```{r Prediction Function Simple MLR}
+
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced[train_idx, ]
+test_set  <- auto_omit_reduced[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced)[sapply(auto_omit_reduced, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (all variables except MSRP) - predicting log(MSRP)
+predictors <- setdiff(names(auto_omit_reduced), "MSRP")
+formula <- as.formula(paste("log(MSRP) ~", paste(predictors, collapse = "+")))
+lm_model <- lm(formula, data = train_set)
+
+#Handle log scale properly
+log_predictions <- predict(lm_model, newdata = test_set)  # These are in LOG scale
+
+# Create both versions for proper evaluation
+test_set$Pred_log_MSRP <- log_predictions                    # Keep log scale predictions
+test_set$Pred_MSRP <- exp(log_predictions)                  # Back-transform to dollar scale
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+#Calculate on both scales for proper interpretation
+
+# === APPROACH 1: Original Dollar Scale (Business Interpretation) ===
+rmse_dollars <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae_dollars  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2_dollars   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+# === APPROACH 2: Log Scale (Statistically Appropriate) ===
+actual_log <- log(test_set$MSRP[valid])
+rmse_log <- sqrt(mean((actual_log - test_set$Pred_log_MSRP[valid])^2))
+mae_log  <- mean(abs(actual_log - test_set$Pred_log_MSRP[valid]))
+r2_log   <- cor(actual_log, test_set$Pred_log_MSRP[valid])^2
+
+# Convert log RMSE to percentage error for easy interpretation
+percentage_error <- (exp(rmse_log) - 1) * 100
+
+cat("\n==== Results for Full Data ====\n")
+cat("=====================================================\n")
+cat("=== DOLLAR SCALE EVALUATION (Business Perspective) ===\n")
+cat("Test RMSE (dollars): $", format(round(rmse_dollars), big.mark = ","), "\n")
+cat("Test MAE (dollars):  $", format(round(mae_dollars), big.mark = ","), "\n")
+cat("Test R-squared:      ", round(r2_dollars, 4), "\n")
+cat("\n=== LOG SCALE EVALUATION (Statistical Perspective) ===\n")
+cat("Test RMSE (log):     ", round(rmse_log, 4), "\n")
+cat("Test MAE (log):      ", round(mae_log, 4), "\n")
+cat("Test R-squared:      ", round(r2_log, 4), "\n")
+cat("Typical % Error:     ±", round(percentage_error, 1), "%\n")
+cat("=====================================================\n")
+
+#Multiple properly scaled visualizations
+
+# Plot 1: Original Dollar Scale (Actual $ vs Predicted $)
+p1 <- ggplot(test_set[valid, ], aes(x = MSRP, y = Pred_MSRP)) +
+  geom_point(alpha = 0.6, color = "steelblue", size = 2) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Dollar Scale",
+       subtitle = paste0("RMSE: $", format(round(rmse_dollars), big.mark = ","), 
+                        " | R² = ", round(r2_dollars, 3)),
+       x = "Actual MSRP ($)",
+       y = "Predicted MSRP ($)") +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Plot 2: Log Scale (Both axes in log scale - STATISTICALLY CORRECT)
+p2 <- ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_log_MSRP)) +
+  geom_point(alpha = 0.6, color = "darkgreen", size = 2) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Log Scale",
+       subtitle = paste0("RMSE: ", round(rmse_log, 3), 
+                        " | Typical Error: ±", round(percentage_error, 1), "%"),
+       x = "Actual log(MSRP)",
+       y = "Predicted log(MSRP)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Plot 3: Residuals vs Fitted (Proper diagnostic plot for log model)
+residuals_log <- log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]
+fitted_log <- test_set$Pred_log_MSRP[valid]
+
+p3 <- ggplot(data.frame(fitted = fitted_log, residuals = residuals_log), 
+             aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.6, color = "purple", size = 2) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) +
+  geom_smooth(se = FALSE, color = "blue", method = "loess", size = 1) +
+  labs(title = "Residuals vs Fitted Values: Log Scale Model",
+       subtitle = "Diagnostic plot for checking model assumptions",
+       x = "Fitted log(MSRP)",
+       y = "Residuals") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Display all plots
+print(p1)
+print(p2)
+print(p3)
+
+# EXPLANATION OF CORRECTIONS
+cat("\n==== KEY CORRECTIONS MADE ====\n")
+cat("1. PREDICTION: exp(log_predictions) to convert back to dollars\n")
+cat("2. METRICS: Calculated on both scales for proper interpretation\n")
+cat("3. PLOTTING: Fixed axis scales and labels to match data\n")
+cat("4. DIAGNOSTICS: Added proper residual plot for log model\n")
+cat("\n==== INTERPRETATION GUIDE ====\n")
+cat("• Use DOLLAR metrics for business decisions\n")
+cat("• Use LOG metrics for statistical model comparison\n")
+cat("• Percentage error gives intuitive sense of accuracy\n")
+cat("• Residual plot shows if model assumptions are met\n")
+
+# BONUS: Model summary for additional insights
+cat("\n==== MODEL SUMMARY ====\n")
+print(summary(lm_model))
+
+
+#No Outliers
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced_no_outliers$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced_no_outliers[train_idx, ]
+test_set  <- auto_omit_reduced_no_outliers[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced_no_outliers)[sapply(auto_omit_reduced_no_outliers, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (all variables except MSRP) - predicting log(MSRP)
+predictors <- setdiff(names(auto_omit_reduced_no_outliers), "MSRP")
+formula <- as.formula(paste("log(MSRP) ~", paste(predictors, collapse = "+")))
+lm_model <- lm(formula, data = train_set)
+
+#Handle log scale properly
+log_predictions <- predict(lm_model, newdata = test_set)  # These are in LOG scale
+
+# Create both versions for proper evaluation
+test_set$Pred_log_MSRP <- log_predictions                    # Keep log scale predictions
+test_set$Pred_MSRP <- exp(log_predictions)                  # Back-transform to dollar scale
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+#Calculate on both scales for proper interpretation
+
+# === APPROACH 1: Original Dollar Scale (Business Interpretation) ===
+rmse_dollars <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae_dollars  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2_dollars   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+# === APPROACH 2: Log Scale (Statistically Appropriate) ===
+actual_log <- log(test_set$MSRP[valid])
+rmse_log <- sqrt(mean((actual_log - test_set$Pred_log_MSRP[valid])^2))
+mae_log  <- mean(abs(actual_log - test_set$Pred_log_MSRP[valid]))
+r2_log   <- cor(actual_log, test_set$Pred_log_MSRP[valid])^2
+
+# Convert log RMSE to percentage error for easy interpretation
+percentage_error <- (exp(rmse_log) - 1) * 100
+
+cat("\n==== Results for No Outlier Data ====\n")
+cat("=====================================================\n")
+cat("=== DOLLAR SCALE EVALUATION (Business Perspective) ===\n")
+cat("Test RMSE (dollars): $", format(round(rmse_dollars), big.mark = ","), "\n")
+cat("Test MAE (dollars):  $", format(round(mae_dollars), big.mark = ","), "\n")
+cat("Test R-squared:      ", round(r2_dollars, 4), "\n")
+cat("\n=== LOG SCALE EVALUATION (Statistical Perspective) ===\n")
+cat("Test RMSE (log):     ", round(rmse_log, 4), "\n")
+cat("Test MAE (log):      ", round(mae_log, 4), "\n")
+cat("Test R-squared:      ", round(r2_log, 4), "\n")
+cat("Typical % Error:     ±", round(percentage_error, 1), "%\n")
+cat("=====================================================\n")
+
+#Multiple properly scaled visualizations
+
+# Plot 1: Original Dollar Scale (Actual $ vs Predicted $)
+p1 <- ggplot(test_set[valid, ], aes(x = MSRP, y = Pred_MSRP)) +
+  geom_point(alpha = 0.6, color = "steelblue", size = 2) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Dollar Scale",
+       subtitle = paste0("RMSE: $", format(round(rmse_dollars), big.mark = ","), 
+                        " | R² = ", round(r2_dollars, 3)),
+       x = "Actual MSRP ($)",
+       y = "Predicted MSRP ($)") +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Plot 2: Log Scale (Both axes in log scale - STATISTICALLY CORRECT)
+p2 <- ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_log_MSRP)) +
+  geom_point(alpha = 0.6, color = "darkgreen", size = 2) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Log Scale",
+       subtitle = paste0("RMSE: ", round(rmse_log, 3), 
+                        " | Typical Error: ±", round(percentage_error, 1), "%"),
+       x = "Actual log(MSRP)",
+       y = "Predicted log(MSRP)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Plot 3: Residuals vs Fitted (Proper diagnostic plot for log model)
+residuals_log <- log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]
+fitted_log <- test_set$Pred_log_MSRP[valid]
+
+p3 <- ggplot(data.frame(fitted = fitted_log, residuals = residuals_log), 
+             aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.6, color = "purple", size = 2) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) +
+  geom_smooth(se = FALSE, color = "blue", method = "loess", size = 1) +
+  labs(title = "Residuals vs Fitted Values: Log Scale Model",
+       subtitle = "Diagnostic plot for checking model assumptions",
+       x = "Fitted log(MSRP)",
+       y = "Residuals") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+
+# Display all plots
+print(p1)
+print(p2)
+print(p3)
+
+# EXPLANATION OF CORRECTIONS
+cat("\n==== KEY CORRECTIONS MADE ====\n")
+cat("1. PREDICTION: exp(log_predictions) to convert back to dollars\n")
+cat("2. METRICS: Calculated on both scales for proper interpretation\n")
+cat("3. PLOTTING: Fixed axis scales and labels to match data\n")
+cat("4. DIAGNOSTICS: Added proper residual plot for log model\n")
+cat("\n==== INTERPRETATION GUIDE ====\n")
+cat("• Use DOLLAR metrics for business decisions\n")
+cat("• Use LOG metrics for statistical model comparison\n")
+cat("• Percentage error gives intuitive sense of accuracy\n")
+cat("• Residual plot shows if model assumptions are met\n")
+
+# BONUS: Model summary for additional insights
+cat("\n==== MODEL SUMMARY ====\n")
+print(summary(lm_model))
+
+```
+
+```{r Prediction Complex MLR}
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced[train_idx, ]
+test_set  <- auto_omit_reduced[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced)[sapply(auto_omit_reduced, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (predicting log(MSRP))
+lm_model <- lm(
+  log(MSRP) ~ 
+    Year +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = train_set
+)
+
+#Back-transform from log scale to original dollar scale
+log_predictions <- predict(lm_model, newdata = test_set)
+test_set$Pred_MSRP <- exp(log_predictions)  # Convert log predictions back to dollars
+
+#log-scale predictions for log-scale evaluation
+test_set$Pred_log_MSRP <- log_predictions
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+#Two approaches for proper evaluation
+
+# Approach 1: Evaluate on Original Dollar Scale (back-transformed predictions)
+rmse_dollars <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae_dollars  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2_dollars   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+# Approach 2: Evaluate on Log Scale (both actual and predicted in log scale)
+rmse_log <- sqrt(mean((log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid])^2))
+mae_log  <- mean(abs(log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]))
+r2_log   <- cor(log(test_set$MSRP[valid]), test_set$Pred_log_MSRP[valid])^2
+
+# Convert log-scale RMSE to percentage error for interpretation
+percentage_error <- (exp(rmse_log) - 1) * 100
+
+cat("\n==== Results for Full Data ====\n")
+cat("=== Original Dollar Scale Evaluation ===\n")
+cat("Test RMSE (dollars):", round(rmse_dollars, 2), "\n")
+cat("Test MAE (dollars):", round(mae_dollars, 2), "\n")
+cat("Test R-squared:", round(r2_dollars, 4), "\n")
+
+cat("\n=== Log Scale Evaluation ===\n")
+cat("Test RMSE (log scale):", round(rmse_log, 4), "\n")
+cat("Test MAE (log scale):", round(mae_log, 4), "\n")
+cat("Test R-squared:", round(r2_log, 4), "\n")
+cat("Typical percentage error: ±", round(percentage_error, 1), "%\n")
+
+# Two plots
+
+# Plot 1: Original Dollar Scale (Actual vs Back-transformed Predictions)
+p1 <- ggplot(test_set[valid, ], aes(x = MSRP, y = Pred_MSRP)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Original Dollar Scale",
+       subtitle = paste("RMSE: $", scales::comma(round(rmse_dollars)), 
+                       " | R² = ", round(r2_dollars, 3)),
+       x = "Actual MSRP ($)",
+       y = "Predicted MSRP ($)") +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+# Plot 2: Log Scale (Both axes in log scale)
+p2 <- ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_log_MSRP)) +
+  geom_point(alpha = 0.6, color = "darkgreen") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Log Scale",
+       subtitle = paste("RMSE: ", round(rmse_log, 3), 
+                       " | Typical Error: ±", round(percentage_error, 1), "%"),
+       x = "Actual log(MSRP)",
+       y = "Predicted log(MSRP)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+# Display both plots
+print(p1)
+print(p2)
+
+# BONUS: Residual Analysis on Log Scale (proper for this model)
+residuals_log <- log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]
+
+p3 <- ggplot(data.frame(fitted = test_set$Pred_log_MSRP[valid], 
+                       residuals = residuals_log), 
+            aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.6, color = "purple") +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) +
+  geom_smooth(se = FALSE, color = "blue", method = "loess") +
+  labs(title = "Residuals vs Fitted: Log Scale Model",
+       subtitle = "Check for patterns indicating model assumptions violations",
+       x = "Fitted log(MSRP)",
+       y = "Residuals (log scale)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(p3)
+
+#No Outliers
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced_no_outliers$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced_no_outliers[train_idx, ]
+test_set  <- auto_omit_reduced_no_outliers[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced_no_outliers)[sapply(auto_omit_reduced_no_outliers, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (predicting log(MSRP))
+lm_model <- lm(
+  log(MSRP) ~ 
+    Year +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = train_set
+)
+
+#Back-transform from log scale to original dollar scale
+log_predictions <- predict(lm_model, newdata = test_set)
+test_set$Pred_MSRP <- exp(log_predictions)  # Convert log predictions back to dollars
+
+#log-scale predictions for log-scale evaluation
+test_set$Pred_log_MSRP <- log_predictions
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+#Two approaches for proper evaluation
+
+# Approach 1: Evaluate on Original Dollar Scale (back-transformed predictions)
+rmse_dollars <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae_dollars  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2_dollars   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+# Approach 2: Evaluate on Log Scale (both actual and predicted in log scale)
+rmse_log <- sqrt(mean((log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid])^2))
+mae_log  <- mean(abs(log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]))
+r2_log   <- cor(log(test_set$MSRP[valid]), test_set$Pred_log_MSRP[valid])^2
+
+# Convert log-scale RMSE to percentage error for interpretation
+percentage_error <- (exp(rmse_log) - 1) * 100
+
+cat("\n==== Results for No Outlier Data ====\n")
+cat("=== Original Dollar Scale Evaluation ===\n")
+cat("Test RMSE (dollars):", round(rmse_dollars, 2), "\n")
+cat("Test MAE (dollars):", round(mae_dollars, 2), "\n")
+cat("Test R-squared:", round(r2_dollars, 4), "\n")
+
+cat("\n=== Log Scale Evaluation ===\n")
+cat("Test RMSE (log scale):", round(rmse_log, 4), "\n")
+cat("Test MAE (log scale):", round(mae_log, 4), "\n")
+cat("Test R-squared:", round(r2_log, 4), "\n")
+cat("Typical percentage error: ±", round(percentage_error, 1), "%\n")
+
+# Two plots
+
+# Plot 1: Original Dollar Scale (Actual vs Back-transformed Predictions)
+p1 <- ggplot(test_set[valid, ], aes(x = MSRP, y = Pred_MSRP)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Original Dollar Scale",
+       subtitle = paste("RMSE: $", scales::comma(round(rmse_dollars)), 
+                       " | R² = ", round(r2_dollars, 3)),
+       x = "Actual MSRP ($)",
+       y = "Predicted MSRP ($)") +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+# Plot 2: Log Scale (Both axes in log scale)
+p2 <- ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_log_MSRP)) +
+  geom_point(alpha = 0.6, color = "darkgreen") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Actual vs Predicted MSRP: Log Scale",
+       subtitle = paste("RMSE: ", round(rmse_log, 3), 
+                       " | Typical Error: ±", round(percentage_error, 1), "%"),
+       x = "Actual log(MSRP)",
+       y = "Predicted log(MSRP)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+# Display both plots
+print(p1)
+print(p2)
+
+# BONUS: Residual Analysis on Log Scale (proper for this model)
+residuals_log <- log(test_set$MSRP[valid]) - test_set$Pred_log_MSRP[valid]
+
+p3 <- ggplot(data.frame(fitted = test_set$Pred_log_MSRP[valid], 
+                       residuals = residuals_log), 
+            aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.6, color = "purple") +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) +
+  geom_smooth(se = FALSE, color = "blue", method = "loess") +
+  labs(title = "Residuals vs Fitted: Log Scale Model",
+       subtitle = "Check for patterns indicating model assumptions violations",
+       x = "Fitted log(MSRP)",
+       y = "Residuals (log scale)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(p3)
+
+cat("\n==== Model Interpretation Guide ====\n")
+cat("• Dollar Scale RMSE: How many dollars your predictions are typically off\n")
+cat("• Log Scale RMSE: More appropriate for this model's assumptions\n")
+cat("• Percentage Error: Easy-to-interpret measure of relative accuracy\n")
+cat("• Use log scale metrics for model comparison and diagnostics\n")
+cat("• Use dollar scale metrics for practical business interpretation\n")
+
+```
+
+Doing everything with Year as a category in stead of numerical
+```{r Year_Group DataSet}
+#creating dataset
+auto_omit_reduced$Year_Group <- factor(ifelse(auto_omit_reduced$Year < 2001, "Pre-2001", "Post-2001"))
+auto_omit_reduced_no_outliers$Year_Group <- factor(ifelse(auto_omit_reduced_no_outliers$Year < 2001, "Pre-2001", "Post-2001"))
+auto_omit_reduced <- dplyr::select(auto_omit_reduced, -Year)
+auto_omit_reduced_no_outliers <- dplyr::select(auto_omit_reduced_no_outliers, -Year)
+
+#Quick EDA
+ggplot(auto_omit_reduced_no_outliers, aes(x = `Year_Group`, y = MSRP)) +
+  geom_boxplot() 
+
+ggplot(auto_omit_reduced_no_outliers, aes(x = MSRP, fill = Year_Group)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  labs(title = "MSRP Distribution by Year Group",
+       x = "MSRP (USD)",
+       fill = "Year Group") +
+  theme_minimal()
+
+#Redoing Feature selection:Step Wise, Penalized Regression
+
+##Needing to redo this part cause of the year thingy
+# Full Model (all predictors) -- LOG TRANSFORMATION
+full.model_log <- lm(log(MSRP) ~ ., data = auto_omit_reduced)
+full.model_noout_log <- lm(log(MSRP) ~ ., data = auto_omit_reduced_no_outliers)
+
+# Null Model (only intercept) -- LOG TRANSFORMATION
+null.model_log <- lm(log(MSRP) ~ 1, data = auto_omit_reduced)
+null.model_noout_log <- lm(log(MSRP) ~ 1, data = auto_omit_reduced_no_outliers)
+
+# Forward Selection -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Market.Category + Engine.HP + Engine.Fuel.Type + Vehicle.Style + city.mpg + Transmission.Type + Driven_Wheels #-20175.37 (NoOut) -20196.35(FULL)
+forward_log <- step(null.model_log, scope = formula(full.model_log), direction = "forward")
+forward_noout_log <- step(null.model_noout_log, scope = formula(full.model_noout_log), direction = "forward")
+
+
+# Backward Elimination -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Engine.Fuel.Type + Engine.HP + Transmission.Type + Driven_Wheels + Market.Category + Vehicle.Style + city.mpg #AIC: -20175.37 (NoOut) -20196.35 (FULL)
+backward_log <- step(full.model_log, direction = "backward")
+backward_noout_log <- step(full.model_noout_log, direction = "backward")
+
+
+# Stepwise Selection -- LOG TRANSFORMATION
+#log(MSRP) ~ Year + Market.Category + Engine.HP + Engine.Fuel.Type + city.mpg + Vehicle.Style + Transmission.Type + Driven_Wheels #AIC -20175.37(no out) -20196.35 (FULL)
+stepwise_log <- step(null.model_log, scope = formula(full.model_log), direction = "both")
+stepwise_noout_log <- step(null.model_noout_log, scope = formula(full.model_noout_log), direction = "both")
+
+
+# Assumption Plots for Log-Transformed Models
+par(mfrow = c(2, 2))
+plot(full.model_log)
+plot(full.model_noout_log)
+par(mfrow = c(1, 1))
+
+#
+# Penalized selection using log(MSRP)
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+
+glmnet_log.fit <- train(log(MSRP) ~ .,
+                       data = auto_omit_reduced,
+                       method = "glmnet",
+                       trControl = fitControl
+                      )
+opt.pen_log <- glmnet_log.fit$finalModel$lambdaOpt 
+#coef(glmnet_log.fit$finalModel, opt.pen_log)
+glmnet_log.fit
+#coefs_log <- coef(glmnet_log.fit$finalModel, glmnet_log.fit$finalModel$lambdaOpt)
+#active_predictors_log <- rownames(coefs_log)[as.numeric(coefs_log) != 0]
+#active_predictors_log
+
+plot(glmnet_log.fit)
+
+glmnet_noout_log.fit <- train(log(MSRP) ~ .,
+                             data = auto_omit_reduced_no_outliers,
+                             method = "glmnet",
+                             trControl = fitControl
+                            )
+opt.pen_noout_log <- glmnet_noout_log.fit$finalModel$lambdaOpt 
+#coef(glmnet_noout_log.fit$finalModel, opt.pen_noout_log)
+glmnet_noout_log.fit
+#coefs_noout_log <- coef(glmnet_noout_log.fit$finalModel, glmnet_noout_log.fit$finalModel$lambdaOpt)
+#active_predictors_noout_log <- rownames(coefs_noout_log)[as.numeric(coefs_noout_log) != 0]
+#active_predictors_noout_log
+
+# Predict and get residuals for log(MSRP)
+preds_noout_log <- predict(glmnet_noout_log.fit, newdata = auto_omit_reduced_no_outliers)
+residuals_noout_log <- log(auto_omit_reduced_no_outliers$MSRP) - preds_noout_log
+df_resid_noout_log <- data.frame(Fitted = as.numeric(preds_noout_log), Residuals = as.numeric(residuals_noout_log))
+
+# Residuals vs Fitted for log model
+library(ggplot2)
+ggplot(df_resid_noout_log, aes(x=Fitted, y=Residuals)) +
+  geom_point() +
+  geom_hline(yintercept=0, linetype="dashed", color="red") +
+  labs(title = "Residuals vs Fitted | glmnet log(MSRP)")
+
+# QQ Plot for log residuals
+ggplot(data.frame(resid = residuals_noout_log), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title = "QQ Plot of Residuals (log MSRP)")
+
+#Non Parametric Stuff
+#KNN_Full
+# 1. Select features
+features <- c("Year_Group", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+knn_data <- auto_omit_reduced %>% select(MSRP, all_of(features))
+
+# 2. Train/test split
+set.seed(123)
+idx <- createDataPartition(knn_data$MSRP, p = 0.8, list = FALSE)
+train_set <- knn_data[idx, ]
+test_set  <- knn_data[-idx, ]
+
+# 3. Create dummy variables (one-hot encoding for categorical predictors)
+dummies   <- dummyVars(MSRP ~ ., data = train_set)
+train_enc <- predict(dummies, newdata = train_set)
+test_enc  <- predict(dummies, newdata = test_set)
+train_enc <- data.frame(MSRP = train_set$MSRP, train_enc)
+test_enc  <- data.frame(MSRP = test_set$MSRP, test_enc)
+
+# 4. Center/scale all numeric variables
+preproc     <- preProcess(train_enc, method = c("center", "scale"))
+train_prep  <- predict(preproc, newdata = train_enc)
+test_prep   <- predict(preproc, newdata = test_enc)
+
+# 5. Fit KNN on processed data
+set.seed(123)
+knn_fit <- train(
+  MSRP ~ .,
+  data = train_prep,
+  method = "knn",
+  tuneLength = 10,
+  trControl = trainControl(method = "cv", number = 5)
+)
+print(knn_fit)
+
+knn_preds <- predict(knn_fit, newdata = test_prep)
+
+ggplot(data = NULL, aes(x = test_prep$MSRP, y = knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    x = "Actual MSRP",
+    y = "Predicted MSRP (KNN)",
+    title = "Predicted vs Actual MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = knn_preds, y = test_prep$MSRP - knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(
+    x = "Predicted MSRP",
+    y = "Residuals (Actual - Predicted)",
+    title = "Residuals vs Predicted MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = test_prep$MSRP - knn_preds)) +
+  geom_histogram(bins = 40, fill = "#56B4E9", color = "white") +
+  labs(
+    x = "Prediction Error (Residuals)",
+    y = "Count",
+    title = "Distribution of Prediction Errors (KNN)"
+  )
+
+#KNN_NoOut
+
+# 1. Select features
+features <- c("Year_Group", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+knn_data <- auto_omit_reduced_no_outliers %>% select(MSRP, all_of(features))
+
+# 2. Train/test split
+set.seed(123)
+idx <- createDataPartition(knn_data$MSRP, p = 0.8, list = FALSE)
+train_set <- knn_data[idx, ]
+test_set  <- knn_data[-idx, ]
+
+# 3. Create dummy variables (one-hot encoding for categorical predictors)
+dummies   <- dummyVars(MSRP ~ ., data = train_set)
+train_enc <- predict(dummies, newdata = train_set)
+test_enc  <- predict(dummies, newdata = test_set)
+train_enc <- data.frame(MSRP = train_set$MSRP, train_enc)
+test_enc  <- data.frame(MSRP = test_set$MSRP, test_enc)
+
+# 4. Center/scale all numeric variables
+preproc     <- preProcess(train_enc, method = c("center", "scale"))
+train_prep  <- predict(preproc, newdata = train_enc)
+test_prep   <- predict(preproc, newdata = test_enc)
+
+# 5. Fit KNN on processed data
+set.seed(123)
+knn_fit <- train(
+  MSRP ~ .,
+  data = train_prep,
+  method = "knn",
+  tuneLength = 10,
+  trControl = trainControl(method = "cv", number = 5)
+)
+print(knn_fit)
+
+knn_preds <- predict(knn_fit, newdata = test_prep)
+
+ggplot(data = NULL, aes(x = test_prep$MSRP, y = knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    x = "Actual MSRP",
+    y = "Predicted MSRP (KNN)",
+    title = "Predicted vs Actual MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = knn_preds, y = test_prep$MSRP - knn_preds)) +
+  geom_point(alpha = 0.4) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(
+    x = "Predicted MSRP",
+    y = "Residuals (Actual - Predicted)",
+    title = "Residuals vs Predicted MSRP (KNN Regression)"
+  ) +
+  theme_minimal()
+
+ggplot(data = NULL, aes(x = test_prep$MSRP - knn_preds)) +
+  geom_histogram(bins = 40, fill = "#56B4E9", color = "white") +
+  labs(
+    x = "Prediction Error (Residuals)",
+    y = "Count",
+    title = "Distribution of Prediction Errors (KNN)"
+  )
+
+#RandomForest_Full
+
+features <- c("Year_Group", "Market.Category", "Engine.HP", "Engine.Fuel.Type", 
+              "city.mpg", "Vehicle.Style", "Transmission.Type", "Driven_Wheels")
+rf_data <- auto_omit_reduced[, c("MSRP", features)]
+rf_data_noout <- auto_omit_reduced_no_outliers[, c("MSRP", features)]
+
+set.seed(123)
+idx <- createDataPartition(rf_data$MSRP, p = 0.8, list = FALSE)
+train_set <- rf_data[idx, ]
+test_set <- rf_data[-idx, ]
+
+set.seed(123)
+rf_fit <- train(
+  MSRP ~ .,
+  data = train_set,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 3),  # 5-fold CV for tuning
+  ntree = 100  # Optional: set number of trees
+)
+print(rf_fit)
+
+
+set.seed(123)
+idx <- createDataPartition(rf_data_noout$MSRP, p = 0.8, list = FALSE)
+rf_noouttrain_set <- rf_data_noout[idx, ]
+rf_noouttest_set <- rf_data_noout[-idx, ]
+
+set.seed(123)
+rf_fit_noout <- train(
+  MSRP ~ .,
+  data = rf_noouttrain_set,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 3),  # 5-fold CV for tuning
+  ntree = 100  # Optional: set number of trees
+)
+print(rf_fit_noout)
+
+##Prediction on Train/Test Set #####
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced[train_idx, ]
+test_set  <- auto_omit_reduced[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced)[sapply(auto_omit_reduced, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (all variables except MSRP)
+#predictors <- setdiff(names(auto_omit_reduced), "MSRP")
+#formula <- as.formula(paste("log(MSRP) ~", paste(predictors, collapse = "+")))
+lm_model <- lm(
+  log(MSRP) ~ 
+    Year_Group +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = train_set
+)
+
+# Predict
+test_set$Pred_MSRP <- predict(lm_model, newdata = test_set)
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+# Metrics (only valid rows)
+rmse <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+cat("\n==== Results for Full Data (Year_Group) ====\n")
+cat("Test RMSE:", rmse, "\n")
+cat("Test MAE:", mae, "\n")
+cat("Test R-squared:", r2, "\n")
+
+# Plot
+ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_MSRP)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted MSRP: Full Data",
+       x = "Actual MSRP",
+       y = "Predicted MSRP") +
+  theme_minimal()
+
+#No Outliers
+set.seed(123)
+train_idx <- createDataPartition(auto_omit_reduced_no_outliers$MSRP, p = 0.8, list = FALSE)
+train_set <- auto_omit_reduced_no_outliers[train_idx, ]
+test_set  <- auto_omit_reduced_no_outliers[-train_idx, ]
+
+# Force categorical/factor levels in test to match train
+cat_vars <- names(auto_omit_reduced_no_outliers)[sapply(auto_omit_reduced_no_outliers, is.factor)]
+for (v in cat_vars) {
+  train_set[[v]] <- factor(train_set[[v]])
+  test_set[[v]]  <- factor(test_set[[v]], levels = levels(train_set[[v]]))
+}
+
+# Model formula (all variables except MSRP)
+#predictors <- setdiff(names(auto_omit_reduced_no_outliers), "MSRP")
+#formula <- as.formula(paste("log(MSRP) ~", paste(predictors, collapse = "+")))
+lm_model <- lm(
+  log(MSRP) ~ 
+    Year_Group +
+    Market.Category +
+    Engine.Fuel.Type +
+    Vehicle.Style +
+    Transmission.Type +
+    Driven_Wheels +
+    city.mpg +
+    Engine.HP +
+    I(Engine.HP^2) +  # Quadratic (polynomial)
+    Engine.HP:Vehicle.Style +
+    Engine.HP:Transmission.Type +
+    city.mpg:Engine.Fuel.Type,
+  data = train_set
+)
+
+# Predict
+test_set$Pred_MSRP <- predict(lm_model, newdata = test_set)
+
+# Restrict to valid predictions
+valid <- !is.na(test_set$Pred_MSRP) & !is.na(test_set$MSRP)
+
+# Metrics (only valid rows)
+rmse <- sqrt(mean((test_set$MSRP[valid] - test_set$Pred_MSRP[valid])^2))
+mae  <- mean(abs(test_set$MSRP[valid] - test_set$Pred_MSRP[valid]))
+r2   <- cor(test_set$MSRP[valid], test_set$Pred_MSRP[valid])^2
+
+cat("\n==== Results for No Outlier Data (Year_Group) ====\n")
+cat("Test RMSE:", rmse, "\n")
+cat("Test MAE:", mae, "\n")
+cat("Test R-squared:", r2, "\n")
+
+# Plot
+ggplot(test_set[valid, ], aes(x = log(MSRP), y = Pred_MSRP)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted MSRP: No Outlier Data",
+       x = "Actual MSRP",
+       y = "Predicted MSRP") +
+  theme_minimal()
+```
+

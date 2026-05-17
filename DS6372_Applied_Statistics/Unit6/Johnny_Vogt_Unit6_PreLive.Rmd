@@ -1,0 +1,46 @@
+
+---
+title: "Unit 6 Pre-Live"
+author: "Johnny Vogt"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Discussion 1
+A. This would take the c.mat Matrix and multiply it with data matrix, shown by the %*%. 
+B.
+step1:Multiplying "x" [1 2 3 4 5]  with [1 1 1 1 1] = [3 3 3 3 3]
+Step2: Subtracting "x" [1 2 3 4 5] from Step1 [3 3 3 3 3] = [-2 -1 0 1 2]
+Step3: Transpose step2 (1 Col, 5 Row) than multiply it with Step2 = 10
+Step4: step3 [10] divdied by (5-1) = 2.5
+Step6: sqrt of 2.5 = 1.581139
+
+C. The multiplcation effectively creates a brand new matrix
+|--                                   - - -|
+| (x11 * 1)+(x21 * 1) (x11 * 1)+(x21*-1)   |
+| (X12 * 1)+(X22 * 1) (X12 * 1)+(X22*-1)   |
+| (X13 * 1)+(x23 * 1) (X13 * 1)+(x23*-1)   |
+|--                                    ----|
+
+Discussion 2
+A. (1 & 3), (1& 4), (2 & 3), and (2 & 4)
+B. sqrt(4) = 2 sqrt(9) =3 sqrt(16) = 4 sqrt(9)=3
+C. Covariance/SD1 *SD2
+1 &2 = 1/6 = 0.167
+3&4 = 6/12 = 1/2
+D. itll be 25 diagonally and 0s everywhere else
+
+Discussion 3
+a. 
+$$X=\begin{bmatrix}
+15 \\
+26 \\
+17 \\
+\end{bmatrix}$$. 
+
+b. 
+Its the same :D

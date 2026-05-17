@@ -1,0 +1,97 @@
+---
+title: "Unit 2 HW"
+author: "MSDS 6372: Jacob Turner"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## HW Instructions
+Students should create a separate R markdown file that includes the necessary code and graphics to answer each question.  The R markdown file should be submitted as well as a knitted version in either Word or HTML. Although the homeworks are designed to offer students a jumping off point when it comes to coding, students are expected to utilize the discussions and R examples used in the live sessions. 
+
+For problems that include making graphics or performing analysis, students should be sure to articulate their answers in writing unless explicitly told not to.  That is, if you provide a figure or table of results then it is expected that commentary will also be provided.
+
+
+## Exercise 1: Conceptual Questions
+A.  Briefly explain the bias variance trade off as a concept.
+B.  If a knn model performs poorly using a value of $k=1$, then is it suffering due to bias or variance?
+C.  What is the main purpose of feature selection?
+D.  When using glmnet, what does the penalty term effectively do to your regression model? For example, what does it do if the penalty term is very large? 
+
+
+## Exercise 2:  Using GLMNET
+
+In the homework assignment for unit 1, we examined the residuals of various polynomial fits to a data set to determine roughly how complex of a polynomial fit is needed.  With our new found knowledge of GLMNET and cross validation, we can investigate this a bit more realistically. The data set is generated below. 
+
+Use the `caret` package and codes from prelive to perform a LASSO model ($\alpha=1$) with GLMNET with potentially up to 10 polynomial terms and determine what highest order degree is needed. Use 5-fold cross validation. Provide the necessary output and brief explanation to justify your answer.
+
+```{r}
+set.seed(1234)
+x<-runif(100,-6,6.5)
+trend<- 2*x^4-2*x^3-50*x^2+100*x+2
+y<-trend+rnorm(100,0,100)
+plot(x,y)
+```
+
+
+
+## Exercise 3: Feature selection is not a fix all
+When people start to learn how to build predictive models, they tend to focus on building the model and do not think enough about what the model is trying to do.  In the case of linear regression, we are fitting linear trends unless we are adding complexity via transformations, polynomial terms, and interaction terms.
+
+Consider the following data set located in the `ISLR` package which contains the salary (in thousands) of Major League baseball players as well as some of their performance statistics both currently and over their career. The variables that begin with the letter C such as CHits stands for the number of hits in their career versus the variable Hits, which is just the number of hits they have on the current salaries.  
+
+```{r}
+library(ISLR) #For the baseball data set
+Hitters2 =na.omit(Hitters)
+which(rownames(Hitters2)=="-Mike Schmidt")
+Hitters2<-Hitters2[-173,]
+
+```
+
+Suppose a novice data analyst runs the following regression model to perform feature selection.  They will use this model to not only predict future Salaries of players that were not included in the study but also provide interpretation as to which statistics are associated to Salary.
+```{r ,echo=T, results='hide'}
+library(caret)
+set.seed(1234)
+fitControl<-trainControl(method="repeatedcv",number=10,repeats=1) 
+glmnet.fit<-train(Salary~.,
+               data=Hitters2,
+               method="glmnet",
+               trControl=fitControl
+               )
+opt.pen<-glmnet.fit$finalModel$lambdaOpt 
+coef(glmnet.fit$finalModel,opt.pen)
+glmnet.fit
+```
+
+A. Although you can predict with a glmnet model, it doesn't offer any traditional hypothesis testing or diagnostics of the model fit.  Use the traditional `lm` function to fit a regression model including only the predictors that the glmnet function call above suggests.  Provide the residual plots of the model and provide commentary on what you see.
+
+B. Compute the VIFs of the model.  
+
+C. Consider the following plot.  Remake this plot two additional ways:  one logging the salary and two logging both salary and career RBIS. Which setting provides the most evidence of getting a good fit with a regression model?
+```{r}
+library(ggplot2)
+ggplot(Hitters2,aes(x=CRBI,y=Salary,color=League))+geom_point()+geom_smooth(method='loess',formula='y~x')+facet_wrap(~League)
+```
+
+
+D. The feature selection tool is somewhat automated. You feed it the response and predictors, and it does the rest.  Using your previous answers, write a short explanation to a new analyst on why feature selection tools are not a fix-all to the entire modeling process.
+
+E. Examine the following plot that plots penalized regression coefficients versus their penalty term. Provide a high level explanation as to why all of the coefficients are 0 when the log lambda value is 8.
+```{r}
+library(rgl)
+knitr::knit_hooks$set(webgl=hook_webgl)
+plot(glmnet.fit$finalModel, xvar = "lambda", label = TRUE)
+```
+
+F. Use the `caret` package to run a 10-fold cross validation to determine an appropriate $k$ when fitting all the numeric predictors (no transformation) to regress Salary (no transformation). Investigate the possible values $k=1,2,3,4,5,6,7,8,9,10,20,30$ using the following option inside of the `train` function.
+```{r, eval=F}
+tuneGrid=expand.grid(k=c(1:10,20,30)) #Do not run in line.  Must be added inside of train function call. Google is your friend if stuck.
+```
+
+G. Compare the RMSE from the CV results of the best $k$ and compare that to the best RMSE from the glmnet fit made by the analyst previously.  Which one wins out?  
+
+
+
+

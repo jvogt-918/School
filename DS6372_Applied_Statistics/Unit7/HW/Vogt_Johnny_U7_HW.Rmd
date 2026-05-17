@@ -1,0 +1,219 @@
+---
+title: "Vogt_Johnny_U7_HW"
+author: "Johnny Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Excercise 1
+
+## A.  What is the primary impact on running a regression model and ignoring the fact that the data has repeated measures in it?
+
+If the regression model ignores the fact that the data has repeated measures in itself, than the data can end up being biased and misleading.
+
+---
+
+## B.  If the pattern of a correlogram shows that the correlation stay relatively constant across the difference in time of your residuals, what correlation structure would be appropriate to model that behavior?
+
+ ** If the correlation stays constant over the course of time, the most apporopriate structure would be the "compound symmetry" structure.
+
+---
+
+## C.  Load in the **nlme** package and type `?corStruct`. Provide a list of the correlation structure names. Keep this in mind that while we've explored AR1 (corExp) and CS (corCompSymm), we can always try others to get a better fit. 
+
+```{r Discussion 1. Question C. }
+library(nlme)
+?corStruct
+# Autoregresssive Process of order1
+# Autoregressive oving average process
+#Continous Autoregressive process
+#Compound Symmetry
+#Exponentila spatial correlation
+#Gaussian Spatial correlation
+#linear spaital correlation
+#RAitonal quadratic spatial correlation
+#SPherical spatial correlation
+#General Symmetric correlation matrix (No structure)\
+``` 
+---
+---
+
+# Excercise 2
+## Brain Sites of Short and Long Term Memory
+In the late 1980s and early 1990s, it was hypothesized that the hippocompal region of brain is a potential site for short term memory and not long term memory.  To test this, 18 monkeys were given training to discriminate 100 pairs of objects. After their training, 11 monkey were randomly selected and went through a procedure that had access to their hippocampal formations blocked.  The remaining 7 were left untreated.  
+
+The interesting bit here is that not all 100 pairs of objects were trained at the same time.  20 were trained to all the monkeys 2 weeks prior to the blockage, 20 were trained 4 weeks prior, and 20 at 8,12, and 16 weeks prior.
+After the blockage to the hippocampus all monkeys were then given a test to see how many pairs of objects they could discriminate. If there hypothesis was true, there should be a difference between the two groups of monkeys when looking at their performance of objecst trained 2 and 4 weeks prior (short term memory) while there should not be much of a difference for the objects for later times prior (long term memory).
+
+A plot of the data set is below. The response is the `NewPercentCorrect` variables which is the percentage of correct objects for each of the 20 items at each training week.  Use the data set to answer the following questions
+
+```{r , echo=F, message=F}
+setwd("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit7/HW/")
+monkey<-read.csv("monkey.csv",stringsAsFactors = T)
+#monkey$Week_Fac<-factor(monkey$Week)
+
+library(tidyverse)
+
+statsMonkey<-monkey %>%
+  group_by(Treatment,Week) %>%
+  summarise(
+    count=n(),
+    PerCorrect=mean(NewPerCorrect),
+    sdIFIT=sd(NewPerCorrect)/sqrt(count),
+    lower=PerCorrect-2*sdIFIT,
+    upper=PerCorrect+2*sdIFIT
+  )
+
+library(ggplot2)
+prof.mean<-ggplot(statsMonkey,aes(x=Week,y=PerCorrect,color=Treatment,shape=Treatment))+
+  geom_line()+
+  geom_point(size=2.5)+
+  labs(y="Mean Percent Correct (new)")+
+  scale_color_manual(values=c("black","skyblue"))+
+  scale_shape_manual(values=c(15,16))+
+  ylim(45,90)+
+  guides(shape="none")+
+  theme_bw()
+
+prof.mean+geom_errorbar(aes(ymin=lower,ymax=upper,color=Treatment),width=2)
+```
+
+## A.  Based on the graph, it doesn't appear that the trend is linear to model Week as a numeric variable.  Additionally the question of interest is to examine what is going on between the treatment versus control at each training week (prior to hippocampal blockage) so treating it as a factor will be helpful.  Based on the graph do you think an interaction term is needed between Treatment and Week? Explain your view point.
+
+```{r Converting week to Factor}
+
+monkey$Week_Fac<-factor(monkey$Week)
+
+
+week_factorstatsMonkey<-monkey %>%
+  group_by(Treatment,Week_Fac) %>%
+  summarise(
+    count=n(),
+    PerCorrect=mean(NewPerCorrect),
+    sdIFIT=sd(NewPerCorrect)/sqrt(count),
+    lower=PerCorrect-2*sdIFIT,
+    upper=PerCorrect+2*sdIFIT
+  )
+
+library(ggplot2)
+week_factorprof.mean<-ggplot(week_factorstatsMonkey,aes(x=Week_Fac,y=PerCorrect,color=Treatment,shape=Treatment))+
+  geom_line(aes(group = Treatment))+
+  geom_point(size=2.5)+
+  labs(y="Mean Percent Correct (new)")+
+  scale_color_manual(values=c("black","skyblue"))+
+  scale_shape_manual(values=c(15,16))+
+  ylim(45,90)+
+  guides(shape="none")+
+  theme_bw()
+
+week_factorprof.mean+geom_errorbar(aes(ymin=lower,ymax=upper,color=Treatment),width=2)
+
+
+#other plot was too hard to interpret
+ggplot(week_factorstatsMonkey, aes(x = Week_Fac, y = PerCorrect, color = Treatment)) +
+  geom_line(aes(group = Treatment), size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  labs(
+    title = "Treating Week as a factor",
+    x = "Training Week",
+    y = "Mean Percent Correct"
+  ) +
+  scale_color_manual(name = "Treatment Group", values = c("black", "skyblue")) +
+  ylim(45, 90) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+```
+I think that there is a interaction between Week and the Treatment. Looking at the plot, you are able to see that depending on the Treatment group, the Mean percentage rises and falls at different rates. 
+---
+
+## B.  Use the modeling codes from the Prelive Assignment to obtain a correlogram of the residuals fitted by a basic MLR model. Be sure to include Week as a factor variable and not numeric. Comment on whether it is obvious on whether a specific correlation structure would work well or not.
+
+```{r correlogram for monkey data set}
+MLR <- lm(NewPerCorrect ~ Week_Fac + Treatment, data = monkey)
+
+library(reshape2)  #For correlogram
+library(Hmisc)    #For correlogram
+
+#Turner's Correlogram Function
+cor.gram<-function(mymodel,subid,timeid){
+  r.raw<- residuals(mymodel)
+  r.frame<-data.frame(sub=subid,time=timeid,resids=r.raw)
+  
+  
+  r.wide<-acast(r.frame,sub~time,value.var="resids")
+  r.cor<-rcorr(r.wide)$r
+  #r.time<-as.numeric(colnames(r.cor))
+  r.tall<-data.frame(rows=rownames(r.cor)[row(r.cor)], vars=colnames(r.cor)[col(r.cor)],
+                     values=c(r.cor))
+  r.tall$d<-abs(as.numeric(r.tall$rows)-as.numeric(r.tall$vars))
+  r.tall<-aggregate(values~d,data=r.tall,function(x){tanh(mean(atanh(x)))})
+  r.tall
+}
+
+mymodel<-lm(NewPerCorrect ~ Week_Fac + Treatment, data = monkey)
+#Getting correlogram
+mycorgram<-cor.gram(mymodel,subid=monkey$Monkey, timeid=monkey$Week_Fac)
+
+ggplot(mycorgram,aes(x=d,y=values))+geom_point()+geom_smooth(method="loess",size=1.5)+
+  ggtitle("Correlogram of Rat Weight MLR Residuals")+
+  xlab("Distance between residuals (Time)")+
+  ylim(0,1)
+
+```
+Based off of the Correlogram, I would move forward with a Autoregressive Structure, since the correlation drops as the distance between resiudal decrease as time increases. 
+---
+
+## C.  Fit two repeated measures models, one compound symmetry and one AR1. Compare the AIC values. You can optionally try the unstructured one if it will run.
+
+```{r}
+#Compound Symmetry
+CS<-gls(NewPerCorrect ~ Week_Fac * Treatment,
+        data=monkey, 
+        correlation=corCompSymm(form=~1|Monkey))
+
+#Autoregressive
+AR1<-gls(NewPerCorrect ~ Week_Fac * Treatment,
+         data=monkey,
+         correlation=corExp(form=~ as.numeric(Week_Fac)|Monkey))
+
+#Unstructured
+US <- gls(NewPerCorrect ~ Week_Fac * Treatment,data=monkey,
+          correlation=corSymm(form=~ as.numeric(Week_Fac)|Monkey), 
+          weights = varIdent(form = ~1 | Week_Fac))
+
+#AIC for CS
+AIC(CS)
+#AIC for AR1
+AIC(AR1)
+#AIC for US
+AIC(US)
+```
+---
+
+##D.  Based on the best AIC fit, use similar codes from the pre live assignment to compare the treatment groups at each Week using a Bonferroni correction.  Does the data conclude that the researchers hypothesis appears reasonable?  Point to which tests support your answer.
+
+```{r Best AIC Model}
+library(nlme)
+library(emmeans)
+
+emm <- emmeans(CS, pairwise ~ Treatment | Week_Fac)
+
+pairwise_results <- contrast(emm, method = "pairwise", adjust = "bonferroni")
+summary(pairwise_results)
+
+emm <- emmeans(AR1, pairwise ~ Treatment | Week_Fac)
+
+pairwise_results <- contrast(emm, method = "pairwise", adjust = "bonferroni")
+summary(pairwise_results)
+```
+Yes, the data does support the researcher's hypothesis that the hippocampus does support the monkey's short term memory in their brain. This is shown through the P-Value by each week. At a significance leve of .05, we are able to assume at 2 and 4 weeks from the procedure, the diffferences between the means of the control and treated groups are statistically significant enough to be considered  different. 
+---

@@ -1,0 +1,63 @@
+---
+title: "Unit 3 HW"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## HW Instructions
+Students should create a separate R markdown file that includes the necessary code and graphics to answer each question.  The R markdown file should be submitted as well as a knitted version in either Word or HTML. Although the homeworks are designed to offer students a jumping off point when it comes to coding, students are expected to utilize the discussions and R examples used in the live sessions. 
+
+For problems that include making graphics or performing analysis, students should be sure to articulate their answers in writing unless explicitly told not to.  That is, if you provide a figure or table of results then it is expected that commentary will also be provided.
+
+
+## Exercise 1:  Conceptual Questions
+A.  Briefly explain what a bootstrap random sample is
+B.  What major problems does the method of bootstrap confidence intervals solve? This can be a general discussion or a specific discussion about regression.
+C.  Briefly explain what the key difference is between an ensemble prediction and a bagged prediction
+
+
+## Exercise 1:  Estimating Percentiles
+Consider the following `diamond` data set, which has as one of its variables the price of the diamond.   
+```{r ,echo=F}
+library(ggplot2)
+set.seed(1234)
+price<-sample(diamonds$price,500)
+hist(price,xlab="Price",main="")
+```
+
+In many areas of study, the parameter of interest is not the mean or the median but a percentile.  For example, suppose a diamond expert is trying to get a handle on the market for high end diamonds and is interested in what the top 10 percent of diamonds are going for in price.  To do this you could calculate the 90th percentile:
+```{r}
+quantile(price,probs=.9)
+```
+This states that 90% of the diamonds cost less than $9,706.60.  Thus the top 10% of the most highly priced diamonds are above this number.  Unfortunately like any other statistic this is just an estimate of what the true 90th percentile for the entire population of diamonds actually is.  Perform a 95% bootstrap confidence interval for 90th percentile of diamond prices to reflect the uncertainty in this estimate.  Provide the classic statistical interpretation to the interval.
+
+
+## Exercise 2: Regression
+During unit 2 pre-live session, we analyzed the golf data set using feature selection tools.  For that discussion, log transforming the response was helpful for dealing with constant variance and normality assumptions.  
+
+The following scatter plot, in particular the last row, provides an investigation of the trends with each predictor and Avg Winnings.  
+```{r}
+library(GGally)
+setwd("~/Desktop/CourseDev/Unit 2/PreLive")
+golf<-read.csv("GolfData2.csv")
+
+#Getting fancy
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point(colour = "blue",size=.2) +
+    geom_smooth(method = loess, color = "red", ...)
+  p
+}
+
+
+ggpairs(golf[,c(2:7,11)],lower=list(continuous=lowerFn),progress = F)
+
+```
+
+A. Assuming the trends are roughly linear and constant variance is the only issue, fit a regression model using all six predictors using a bootstrap procedure.  Use the intervals to determine if all predictors are relevant.  Provide an interpretation of the coefficient on the greens variable.  The nice advantage here is that the transformation interpretations are not needed here.
+
+B. The coefficient on AvgPutts is huge!! It almost seems unrealistic.  Try to explain why this interval estimate may still make sense.  Hint: Try to offer an interpretation that would relate to a more realistic setting rather than a one unit increase in AvgPutts.

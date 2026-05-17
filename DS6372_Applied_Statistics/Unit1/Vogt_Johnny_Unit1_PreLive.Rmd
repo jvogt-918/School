@@ -1,0 +1,183 @@
+---
+title: "Unit 1 Pre-Live Assignment"
+author: "MSDS 6372: Jacob Turner"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1
+What is the fundamental difference between parametric and nonparametric models?  Did any of the embedded questions throughout the synchronous material give you problems?  If so which ones? Try to articulate what is troubling you.
+
+The difference between parametric and non parametric models are what they are used for. You would use a parametric model when the relationship between your explanatory and response variable meet all the assumptions of the model. Inversely, a non-parametric model is used when the assumptions are not met and no transformations were done to meet the assumptions. From the video synch videos, a large functional difference is whether or not the f(x) is defined, with parametrics having it defined and the opposite for non-parametric models. As for embedded questions, I don't think I saw or heard any questions in the video. I don't think I have a strong understanding how VIFs detect multicollinearity, after some looking up, I know that a low VIF means no correlation between other variables and 10 is means the exact opposite, but I don't know WHY a low number means no multicollienarity. 
+
+## Discussion 2
+For this discussion, let us read in the Advertising data set discussed in the unit 1 videos.  The packages here are for the KNN fitting as well as graphical presentations.  Please note that if you are a Mac user, the `rgl` package requires an additional download of Xquart before proceeding.  This is not an R package but can be found at [Xquartz](https://www.xquartz.org).
+```{r Adver}
+library(rgl) ##For mac users you may need to download Xquartz before the 3d plots will run.
+knitr::knit_hooks$set(webgl=hook_webgl)
+library(FNN)
+setwd("C:/Users/Owner/git/School/DS6372_Applied_Statistics/")
+Adver<-read.csv("/Users/Owner/git/School/DS6372_Applied_Statistics/Unit1/advertising.csv",header=T)
+head(Adver)
+```
+The following code chunk presents a simple, additive MLR fit by way of a 3D scatter plot similar to the unit 1 videos.  Note the graphs may show up only when you knit the document.
+```{r MLR, webgl=TRUE}
+simple.fit<-lm(sales~TV+radio,data=Adver)
+plot3d(Adver$TV,Adver$radio,Adver$sales,xlab="TV",ylab="Radio",zlab="Sales")
+surface3d(0:300,0:50,outer(0:300,0:50,function(x,y) {2.92+.04575*x+.18799*y}),alpha=.4)
+
+```
+
+Next we have a $knn$ model with $k=5$.
+```{r knn, webgl=TRUE}
+predictors<-data.frame(TV=rep(0:300,51),radio=rep(0:50,each=301)) #Grid of points instead of using outer function previously
+knn5<-knn.reg(Adver[,2:3],test=predictors,y=Adver$sales,k=5)
+pred.surface<-matrix(knn5$pred,301,51)
+plot3d(Adver$TV,Adver$radio,Adver$sales,xlab="TV",ylab="Radio",zlab="Sales")
+surface3d(0:300,0:50,pred.surface,alpha=.4)
+
+```
+Compare the MLR fit to additional KNN models changing $k=5$ to $k=2,10, 30$.  Summarize your findings.
+K=2
+```{r knn2, webgl=TRUE}
+knn2<-knn.reg(Adver[,2:3],test=predictors,y=Adver$sales,k=2)
+pred.surfacek2<-matrix(knn2$pred,301,51)
+surface3d(0:300,0:50,pred.surfacek2,alpha=.4)
+```
+k=10
+```{r knn3, webgl=TRUE}
+knn10<-knn.reg(Adver[,2:3],test=predictors,y=Adver$sales,k=10)
+pred.surfacek10<-matrix(knn10$pred,301,51)
+surface3d(0:300,0:50,pred.surfacek10,alpha=.4)
+```
+k=30
+```{r knn4, webgl=TRUE}
+knn30<-knn.reg(Adver[,2:3],test=predictors,y=Adver$sales,k=30)
+pred.surfacek30<-matrix(knn30$pred,301,51)
+surface3d(0:300,0:50,pred.surfacek30,alpha=.4)
+```
+Summary:
+As we increase the amount of neighbors in the model, we start to increase the complexity of the model and the plane from the 3d plot starts to follow closer to the plots of graph. 
+
+## Discussion 3: Sex Discimination
+The following data set was obtained during a sex discrimination case involving a bank in the 1960's and 1970's.  There are 93 employees who were hired during this time.  I've provide a few graphs to explore the data set as well. For this exercise, the response is their base salary upon being hired and we will ignore what their salary was as of March 1975.
+
+```{r}
+library(Sleuth3)
+library(ggplot2)
+library(gridExtra)
+head(case1202)
+p1<-ggplot(data=case1202,aes(x=Age,y=Bsal,colour=Sex))+geom_point()
+p2<-ggplot(data=case1202,aes(x=Educ,y=Bsal,colour=Sex))+geom_point()
+p3<-ggplot(data=case1202,aes(x=Exper,y=Bsal,colour=Sex))+geom_point()
+#grid.arrange(p1,p2,p3,nrow=1)
+p1
+p2
+p3
+```
+
+1. Using the provided graphs, do any of the predictor variables look like they are confounded with Sex?  That is, is there any strong associate between Sex status and the other predictor variables?  
+
+a: Yes, sex does seem to have an association with the base salary of an employee. In all three graph, it appears that males have a higher salary than females
+
+2. Use the `lm` function to fit a regression model to baseline salary with Sex, Education, Experience, and Age in the model.  Store this regression model and use the `plot` function to examine the residuals.  Comment on the validity of this model in terms of the assumptions of MLR. The code should look similar to the following.  You can modify as necessary.
+
+a: Assumptions seems to be violated. Looking at the Residual vs. Fitted plot, there are two clusters. Suggesting that there isnt a linear relationship between predictors and the response. THe Normality assumption is met through the QQ Plot, with most points falling on the line of reference. Each point should be independent from each other as well. Aside from the clustering, the homoscedasticity of the residuals are random and there isnt enough data to visually assume that the variance ISN't constant. The largest violation is the linearity and from the earlier ggplots, its very likely that the gender of the worker is causing this pattern. 
+```{r, eval=F}
+mymodel<-lm(Bsal~Sex+ Age +Educ + Exper ,data=case1202)
+par(mfrow=c(2,2))
+plot(mymodel)
+par(mfrow=c(1,1))
+```
+3. Use the `summary` function to obtain the regression coefficients of your model.  Interpret the regression coefficient corresponding to the sex variable.  What is the result of the test suggesting in regards to the ultimate goal of the study which is to determine if there is evidence of sexual discrimination?
+
+a: The model suggest that at an age of 0 the base salary of female employees is 4654.4181, keeping in mind that no one is working at an age of 0. For every year a person grows older, the base salary increases by 0.9673. The intercept of the model is adjusted when we account for male employees. The intercept increases by 892.3423 for a base salary of 5546.7607 and the increase by age stays constant. The goal of the study was to determine if there is a discrimination in pay based off of genders. From the coefficients, the Sex coefficient has a high t-value and a p-value of 1.37e-9, we can safely assume that that the mean intercept in base salary between genders is different. This suggests at the very least that the intercept for base pay between male and female favor towards male employees. 
+```{r}
+mymodel<-lm(Bsal~Sex+Age,data=case1202)
+summary(mymodel)
+mymodel2<-lm(Bsal~Sex+Age+Educ+Exper,data=case1202)
+summary(mymodel2)
+```
+4. Try rerunning the previous ggplots but adding a `+geom_smooth` at the end of each.  What does this do graphically?  Does it suggest we should do anything to perhaps better fit our model?
+
+a: Each plot supports the model where male employees seem to have a higher intercept. At closer inspection, in respect to ages, male employees seem to have a sharper incline and a slower decline in pay. We could add "sex*age" to account for the change in slope as well. The other two explanatory have interesting notes, Education seems to have little effect on salary until it reaches 16 years for male, but female employees follow an erratic pattern. Experience does seem to show a correlation with the regression line. I wouldn't use education becuase of the lack of datapoints in other education categories and I would consider adding experience to the model. 
+
+```{r}
+ps1<-ggplot(data=case1202,aes(x=Age,y=Bsal,colour=Sex))+geom_point()+geom_smooth()
+ps2<-ggplot(data=case1202,aes(x=Educ,y=Bsal,colour=Sex))+geom_point()+geom_smooth()
+ps3<-ggplot(data=case1202,aes(x=Exper,y=Bsal,colour=Sex))+geom_point()+geom_smooth()
+#grid.arrange(p1,p2,p3,nrow=1)
+ps1
+ps2
+ps3
+```
+
+5. Think about any additional comments or questions that you have for your instructor.
+
+
+## Discussion 4: Vitamin C
+The following data set is a study investigating the tooth growth of guinea pigs based on three different dosage levels of vitamin C supplement (pill) or orange juice. The key question is whether there are differences in average tooth growth between the two approaches to giving the rodents vitamin C and whether dosage has anything to do with it as well.
+```{r}
+newTooth<-ToothGrowth
+newTooth$dose<-factor(newTooth$dose)
+head(newTooth)
+```
+
+Since both of these variables are categorical, lets take a look at some boxplots.
+```{r}
+ggplot(data=newTooth,aes(x=dose,y=len,colour=supp))+geom_boxplot()
+```
+
+1. Based on the boxplots do you believe that an MLR model with `dose` and `supp` is all that is needed or should an interaction term also be needed as well?
+
+a: I do not think this is enough to say this just the two predictors are "enough", but thats all we have. So it's kinda has to be enough. Seeing how at 2 doses OJ and VC have the same mean, makes me want to put an interaction between the supp and dose since the slopes seems to be different between the two variables. 
+
+2. The following code chunk runs a regression model with an interaction term and provides the ANOVA F test for each component of the model.  Assuming assumptions are met, does this output support your answer in the previous question?
+
+a: No it doesn't necessarily support my answer. Dose and Supp do have a statistically significant effect on the intercept, but there is not enough evidence to suggest that the slope from the interaction from dose and supp are different from zero. 
+
+```{r, results=FALSE}
+mymodel<-lm(len~dose*supp,data=newTooth)
+library(car)
+Anova(mymodel,type=3)
+```
+3.  The following code chunk reads in Dr. Turner's contrast function and uses it to perform three tests.  Do your best (if you are stuck that is okay) to try to explain what these three tests are asking in terms of what the null hypotheses are. I've given you a hint on an additional contrast to hopefully help move things along. Looking at the previous box plots could help as well.
+
+Contrast 1: y = 1 * SuppVC = Contrast 1 tests the effect of SuppVC on the length of teeth (response), while holding the doses constant or maybe removing them from the test... maybe. idk. 
+
+Contrast 2: y = 1 * SuppVC + 1 * (dose2*suppVC) = Contrast 2 tests the effect of SuppVC and the interaction between dose 2 and SuppVC on the growth of the length of the teeth. 
+
+Contrast 3: y = -1 * dose1 + 1 * dose2 = Contrast 3 compares the difference between the effects between the two doses, while holding the SuppVC constant. 
+
+```{r}
+summary(mymodel)$coefficients
+
+#Contrast maker
+lm.contrast<-function(lmobj,contrast){
+  if(is.matrix(contrast)==F) contrast<-matrix(contrast,nrow=1)
+  if(ncol(contrast)!=length(coef(lmobj))) return("Error: Contrast length does not match the number of coefficients in linear model object.")
+  estimates<-contrast %*% coef(lmobj)
+  se<- sqrt(diag(contrast %*% vcov(lmobj) %*% t(contrast)))
+  t.stat<-estimates/se
+  p.val<-pt(-abs(t.stat),df=lmobj$df.residual)
+  ci.l<-estimates-qt(.975,df=lmobj$df.residual)*se
+  ci.u<-estimates+qt(.975,df=lmobj$df.residual)*se
+  results<-data.frame(Estimates=estimates,SE=se,t.stat,p.val,Lower=ci.l,Upper=ci.u)
+  return(results)
+  }
+
+#Contrasts for the discussion:
+contrast1<-c(0,0,0,1,0,0)  #SuppVC
+contrastHint<-c(0,0,0,1,1,0) #SuppVC & dose1:suppVC Hint:  This is comparing VC vs Supp specifically at Dose 1 S
+contrast2<-c(0,0,0,1,0,1) # Suppvc & dose2:suppVC
+contrast3<-c(0,-1,1,0,0,0)
+
+contrast.matrix<-rbind(contrast1,contrast2,contrast3)
+lm.contrast(mymodel,contrast.matrix)
+
+```
+
+

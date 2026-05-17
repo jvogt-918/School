@@ -1,0 +1,211 @@
+---
+title: "Unit 12 Pre-Live Session"
+author: 'MSDS 6372: Jacob Turner'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Discussion 1: Adjustment of a 2x2 table
+Dr. Turner mentioned in the videos that, like MLR, logistic regression allows for estimating effects while taking into account additional variables.  These additional variables could be confounding the effect you wish to estimate most. Consider the following example where two colleges had a science competitions. Four hundred students from each college were given an exam and were given a grade of pass or fail.  We additionally have information on whether the student is in the physics or math department. 
+```{r cars}
+setwd("~/Desktop/CourseDev/Unit 12/PreLive")
+comp<-read.csv("ScienceCompetition.csv",stringsAsFactors = T)
+levels(comp$Pass)
+head(comp)
+```
+ 
+ A.  Consider the two logistic regression model fits.  Interpret the regression coefficient on the school variable for each model.  State the big finding here.
+```{r}
+coef(summary(glm(Pass~School,data=comp,family="binomial")))
+coef(summary(glm(Pass~School+Dept,data=comp,family="binomial")))
+
+exp(confint(glm(Pass~School,data=comp,family="binomial")))
+exp(confint(glm(Pass~School+Dept,data=comp,family="binomial")))
+```
+B.  The more appropriate result is the multiple logistic model including both predictors.  Use the following graphs to try to explain why the result changes the way it does between the two models.
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+g1<-comp %>% 
+  group_by(School,Pass) %>%
+  summarise(cnt=n()) %>%
+  mutate(perc=round(cnt/sum(cnt),4))%>%
+  arrange(desc(perc))
+#g1
+
+ggplot(g1[c(1,3),],aes(x=reorder(School,-perc),y=perc,colour=School))+
+  geom_bar(aes(fill=School),show.legend=T,stat="identity")+
+  ylab("Proportion of Passing ")+
+  xlab("School")
+
+
+g2<-comp %>% 
+  group_by(Dept,Pass) %>%
+  summarise(cnt=n()) %>%
+  mutate(perc=round(cnt/sum(cnt),4))%>%
+  arrange(desc(perc))
+#g2
+
+ggplot(g2[c(2,4),],aes(x=reorder(Dept,-perc),y=perc,colour=Dept))+
+  geom_bar(aes(fill=Dept),show.legend=T,stat="identity")+
+  ylab("Proportion of Passing ")+
+  xlab("Dept.")
+
+
+g3<-comp %>% 
+  group_by(Dept,School) %>%
+  summarise(cnt=n()) %>%
+  mutate(perc=round(cnt/sum(cnt),4))%>%
+  arrange(desc(perc))
+#g3
+
+ggplot(g3,aes(x=reorder(Dept,-perc),y=cnt,colour=Dept))+
+  geom_bar(aes(fill=Dept),show.legend=T,stat="identity")+
+  ylab("Count of Students ")+
+  xlab("Dept.")+facet_grid(~School)
+
+
+```
+
+ 
+ 
+ 
+## Discussion 2: Titanic Data Set Revisited
+This section is to show you how many of the graphs were made in the videos.  We'll also use this to provide a quick example of feature selection on top of it.
+
+As explored in the videos, interactions potentially exist between Sex and Age.   
+```{r pressure, echo=FALSE}
+setwd("~/Desktop/CourseDev/Unit 12/PreLive")
+Rose<-read.csv("titanic.csv",stringsAsFactors = T)
+Rose$Pclass<-factor(Rose$Pclass)
+#Age by sex
+ggplot(Rose,aes(x=Age,y=Survived,colour=Sex))+geom_point()+
+  geom_smooth(method="loess",size=1,span=.75)+
+  ylim(-.2,1.2)
+
+#Age by class
+ggplot(Rose,aes(x=Age,y=Survived,colour=factor(Pclass)))+geom_point()+
+  geom_smooth(method="loess",size=1,span=.75)+
+  ylim(-.2,1.2)+
+  facet_wrap(~factor(Pclass))
+```
+
+To get a quick feel on whether interactions are important or not, we can use an AIC metric on multiple models and compare. The following code fits a simple additive model using the key predictors of interest and two additional complex models: one that intuitively makes sense based on the EDA and another with even more complexity.
+Although you do not have to do this, I'm going to create a categorical version of the response as well.
+```{r}
+Rose$Survived2<-factor(ifelse(Rose$Survived==1,"Survived","Perished"))
+simple<-glm(Survived2~Pclass+Age+Sex,data=Rose,family="binomial")
+complex1<-glm(Survived2~Pclass+Age+Sex+Age:Pclass+Age:Sex+Pclass:Sex,data=Rose,family="binomial")
+complex2<-glm(Survived2~Pclass+poly(Age,3)+Sex+poly(Age,3):Pclass+poly(Age,3):Sex+Pclass:Sex,data=Rose,family="binomial")
+
+AIC(simple)
+AIC(complex1)
+AIC(complex2)
+```
+
+An additional way to test is to provide a deviance test.  This is the equivalent of a partial F test in regression. It is a global test of coefficients that are unique to one model relative to a simpler model.  When performing a deviance test between the simple and first complex model, the test is highly significant suggesting that at least one of the coefficients unique to the complex model is not 0.
+```{r}
+anova(simple,complex1,test='LR')
+```
+A.  In this example, the AIC metric actually favors the most complex model.  The model is most likely overfitting because the uncertainty in the estimates are quite large creating a ton of insignificant tests..
+To see this, compare the regression coefficients for the two complex models.  What is the general theme here?
+```{r, eval=F}
+coef(summary(complex1))
+coef(summary(complex2))
+```
+
+B.  To help interpret a logistic regression model, effects plots can be used. Three examples follow. Note that when a predictor is not used in the effect plot, **R** fixes the variable at a certain value. Its better to only fix values that do not have interaction terms in the model.  Use the the last graph to estimate what the probability of survival is for a female in second class, age 60.
+```{r}
+library(sjPlot)
+library(sjmisc)
+plot_model(complex1,type="pred",terms=c("Sex","Age[5,15,30,45]"))
+plot_model(complex1,type="pred",terms=c("Pclass","Age[5,15,30,45]"))
+plot_model(complex1,type="pred",terms=c("Age","Sex","Pclass"))
+```
+
+
+C.  GLMNET and Stepwise feature selection tools exist in caret. These can be used to handle situations where the number of predictors is too large to handle manually.  Like with MLR, you can use these tools to determine candidate models, but it is up to you to decide if interactions should be included, transformations applied, etc.  You will also need to fit a final model using `glm` if you wish to provide statistical inference.  Recall that fitting models after feature selection on the same data set tends to generate p-values that are too small.  This is typically done in practice and development of methods to handle this issue are still ongoing.
+
+Run the following feature selection code and examine what predictors are included.  For stepwise selection, it will report each step of the process so the output is lengthy.  We can discuss this during live session.  For this exercise, provide a quick summary of what coefficients were included using stepwise and GLMnet. Do these suggest a model closer to the simple, complex1, or complex 2 models fit earlier? 
+
+```{r, echo=T,results='hide'}
+library(caret)
+fitControl<-trainControl(method="repeatedcv",number=5,repeats=1,classProbs=TRUE, summaryFunction=mnLogLoss)
+set.seed(1234)
+#note CV and error metric are not really used here, but logLoss is reported for the final model.
+Step.fit<-train(Survived2~Pclass+poly(Age,3)+Sex+poly(Age,3):Pclass+poly(Age,3):Sex+Pclass:Sex,
+                    data=Rose,
+                    method="glmStepAIC",
+                    trControl=fitControl,
+                    metric="logLoss")
+coef(Step.fit$finalModel)
+
+
+#GLMNET
+glmnet.fit<-train(Survived2~Pclass+poly(Age,3)+Sex+poly(Age,3):Pclass+poly(Age,3):Sex+Pclass:Sex,
+                    data=Rose,
+                    method="glmnet",
+                    trControl=fitControl,
+                    metric="logLoss")
+coef(glmnet.fit$finalModel,glmnet.fit$finalModel$lambdaOpt)
+
+
+```
+
+## Discussion 3:  Introduction to the ROC curve
+A point of discussion during live session will be the introduction if another error metric that can be used to investigate the importance of models as well as compare models.  The error metric is derived from a graphical display known as the receiver operating characteristic curve (ROC). For now, the following code produces two ROC curves using the simple and complex1 models.  Use Google to do a quick search on what an ROC curve is and how to read it.  What does the ROC curve suggest when comparing the two models?  Note these are done on the training data so they are a bit optimistic.  In practice we will be doing it on a validation set or via CV.
+
+```{r}
+library(pROC)
+#Predicting probabilities on the training data
+#Age and SPclass only model
+simple<-glm(Survived2~Age+Pclass,data=Rose,family="binomial")
+simple.predprobs<-predict(simple,Rose,type="response")  #note if we were using a caret model type="raw"
+
+#Complex model from previous
+complex1.predprobs<-predict(complex1,Rose,type="response")
+
+
+simple.roc<-roc(response=Rose$Survived2,predictor=simple.predprobs,levels=c("Perished","Survived"))
+complex1.roc<-roc(response=Rose$Survived2,predictor=complex1.predprobs,levels=c("Perished","Survived"))
+#Note if using a caret model make sure to only feed one set of predicted probabilies. Caret models provide both category prediction so you have to pull the one you need.
+
+plot(simple.roc)
+plot(complex1.roc,print.thres="best",col="red",add=T,legend=T)
+legend("bottomright",
+       legend=c("Simple", "Complex"),
+       col=c("black", "red"),
+       lwd=4, cex =1, xpd = TRUE, horiz = FALSE)
+```
+
+Note that in the code above we never specified a threshold like we do for confusion matrices.
+
+
+
+## ROC curves in caret
+No work to do past this.  Coding is slightly different when computing an ROC curve from a model fit using caret.  Next is the ROC curve on the training data of the glmnet fit earlier:
+```{r}
+library(pROC)
+#Predicting probabilities on the training data
+glmnet.predprobs<-predict(glmnet.fit,Rose,type="prob")  #note if we were using a caret model type="raw"
+glmnet.roc<-roc(response=Rose$Survived2,predictor=glmnet.predprobs$Survived,levels=c("Perished","Survived"))
+
+plot(simple.roc)
+plot(complex1.roc,print.thres="best",col="red",add=T)
+plot(glmnet.roc,add=T,col="lightblue")
+legend("bottomright",
+       legend=c("Simple", "Complex","GLMNET"),
+       col=c("black", "red","lightblue"),
+       lwd=4, cex =1, xpd = TRUE, horiz = FALSE)
+
+#plot(log.roc,print.thres="best") #This graph is nice because the x axis is plotted in terms of specificity rather than FPR
+#auc(log.roc)
+
+```
+
+
